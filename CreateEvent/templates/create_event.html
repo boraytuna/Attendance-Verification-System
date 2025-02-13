@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Create a New Event</title>
+    <script>
+        function submitForm(event) {
+            event.preventDefault();  // Prevent page refresh
+
+            // Collect form data
+            let eventData = {
+                event_name: document.getElementById("event_name").value,
+                event_date: document.getElementById("event_date").value,
+                start_time: document.getElementById("start_time").value,
+                end_time: document.getElementById("end_time").value,
+                professor: document.getElementById("professor").value,
+                class: document.getElementById("class").value
+            };
+
+            // Send data to Flask
+            fetch("/submit_event", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(eventData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById("message").innerText = data.message;
+
+                // Clear form fields
+                document.getElementById("event_form").reset();
+            })
+            .catch(error => console.error("Error:", error));
+        }
+    </script>
+</head>
+<body>
+    <h1>Create a New Event</h1>
+    <form id="event_form" onsubmit="submitForm(event)">
+        <label for="event_name">Event Name:</label>
+        <input type="text" id="event_name" name="event_name" required><br><br>
+
+        <label for="event_date">Event Date:</label>
+        <input type="date" id="event_date" name="event_date" required><br><br>
+
+        <label for="start_time">Start Time:</label>
+        <input type="time" id="start_time" name="start_time" required><br><br>
+
+        <label for="end_time">End Time:</label>
+        <input type="time" id="end_time" name="end_time" required><br><br>
+
+        <label for="professor">Select Professor:</label>
+        <select id="professor" name="professor">
+            {% for prof in professors %}
+                <option value="{{ prof }}">{{ prof }}</option>
+            {% endfor %}
+        </select><br><br>
+
+        <label for="class">Select Class:</label>
+        <select id="class" name="class">
+            {% for cls in classes %}
+                <option value="{{ cls }}">{{ cls }}</option>
+            {% endfor %}
+        </select><br><br>
+
+        <button type="submit">Submit</button>
+    </form>
+
+    <h2 id="message" style="color: green;"></h2>
+</body>
+</html>
+
