@@ -11,27 +11,46 @@ def get_db_connection():
     conn.execute('PRAGMA foreign_keys = ON')  # Enable foreign key constraints
     return conn
 
-# Route: Professor Dashboard
-@app.route("/professor_dashboard", methods=["GET"])
-def professor_dashboard():
+# Route: Dashboard
+@app.route("/")
+@app.route("/dashboard")
+def dashboard():
+    return render_template("dashboard.html")
+
+# Route: Events Page
+@app.route("/events", methods=["GET"])
+def events():
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM events")
     events = cursor.fetchall()
     conn.close()
-    return render_template("professor_dashboard.html", events=events)
+    return render_template("events.html", events=events)
+
+# Route: Calendar Page
+@app.route("/calendar")
+def calendar():
+    return render_template("calendar.html")
+
+# Route: Find Student Page
+@app.route("/find_student")
+def find_student():
+    return render_template("find_student.html")
+
+# Route: Places Page
+@app.route("/places")
+def places():
+    return render_template("places.html")
 
 # Route: Handle Event Creation
 @app.route("/submit_event", methods=["POST"])
 def submit_event():
-    # Retrieve form data
     event_name = request.form["event_name"]
     event_date = request.form["event_date"]
     start_time = request.form["start_time"]
     stop_time = request.form["stop_time"]
-    event_location = request.form["event_location"]
+    event_location = request.form["event_location"]  # Will be "lat,lng"
 
-    # Insert event into the database
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute('''
@@ -41,14 +60,14 @@ def submit_event():
     conn.commit()
     conn.close()
 
-    return redirect("/professor_dashboard")
+    return redirect("/events")
 
-# Route: API endpoint for event list
+# Route: API endpoint for event list (returns JSON)
 @app.route("/api/events", methods=["GET"])
 def get_events():
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM events")
+    cursor.execute("SELECT eventID, eventName, eventDate, startTime, stopTime, eventLocation FROM events")
     events = cursor.fetchall()
     conn.close()
 
@@ -57,3 +76,4 @@ def get_events():
 
 if __name__ == "__main__":
     app.run(debug=True)
+

@@ -1,8 +1,10 @@
-<!DOCTYPE html>
+{% extends 'base.html' %}
+{% block content %}
+
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Professor Dashboard - Event Management</title>
+    <title>Event Management</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script>
@@ -10,13 +12,17 @@
         let selectedLocation = "";
 
         function initMap() {
-            map = L.map('map').setView([40.7128, -74.0060], 10); // Default to NYC
+            // Center on Saint Bonaventure University
+            map = L.map('map').setView([42.0792, -78.4823], 15);
+
+            // Add OpenStreetMap tiles
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 18,
             }).addTo(map);
 
             let marker;
 
+            // Handle map clicks to select event location
             map.on('click', function(e) {
                 if (marker) {
                     map.removeLayer(marker);
@@ -25,6 +31,17 @@
                 selectedLocation = `${e.latlng.lat},${e.latlng.lng}`;
                 document.getElementById('event_location').value = selectedLocation;
             });
+
+            // Fetch and display existing events
+            fetch("/api/events")
+                .then(response => response.json())
+                .then(events => {
+                    events.forEach(event => {
+                        let eventMarker = L.marker([event.latitude, event.longitude]).addTo(map);
+                        eventMarker.bindPopup(`<b>${event.eventName}</b><br>${event.eventDate}`);
+                    });
+                })
+                .catch(error => console.error("Error loading events:", error));
         }
     </script>
     <style>
@@ -96,7 +113,7 @@
 </head>
 <body onload="initMap()">
 
-    <h1>🎓 Professor Dashboard - Event Management</h1>
+    <h1>🎓 Event Management</h1>
 
     <!-- Event Creation Form -->
     <form action="/submit_event" method="post">
@@ -122,31 +139,36 @@
     </form>
 
     <!-- Event List Display -->
-    <h2>📅 Scheduled Events</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Event ID</th>
-                <th>Name</th>
-                <th>Date</th>
-                <th>Start Time</th>
-                <th>End Time</th>
-                <th>Location (Lat,Lng)</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for event in events %}
-            <tr>
-                <td>{{ event['eventID'] }}</td>
-                <td>{{ event['eventName'] }}</td>
-                <td>{{ event['eventDate'] }}</td>
-                <td>{{ event['startTime'] }}</td>
-                <td>{{ event['stopTime'] }}</td>
-                <td>{{ event['eventLocation'] }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+<h2>📅 Scheduled Events</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Event Name</th>
+            <th>Date</th>
+            <th>Start Time</th>
+            <th>Location</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for event in events %}
+        <tr>
+            <td>{{ event['eventName'] }}</td>
+            <td>{{ event['eventDate'] }}</td>
+            <td>{{ event['startTime'] }}</td>
+            <td>
+                {% if 'latitude' in event and 'longitude' in event %}
+                    {{ event['latitude'] }}, {{ event['longitude'] }}
+                {% else %}
+                    {{ event['eventLocation'] }}
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
 
 </body>
 </html>
+
+{% endblock %}
