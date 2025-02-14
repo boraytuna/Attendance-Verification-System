@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Professor Dashboard - Event Management</title>
+    <script>
+        function confirmSubmission() {
+            alert("Event created successfully!");
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 40px;
+            background-color: #f3f6f9;
+            color: #333;
+        }
+        h1 {
+            color: #0056b3;
+        }
+        form {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+            max-width: 500px;
+        }
+        label {
+            font-weight: bold;
+        }
+        input, button {
+            margin-top: 10px;
+            padding: 10px;
+            width: 100%;
+            margin-bottom: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #0056b3;
+            color: #fff;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #004494;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        th, td {
+            padding: 15px;
+            border: 1px solid #ccc;
+            text-align: left;
+        }
+        th {
+            background-color: #0056b3;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🎓 Professor Dashboard - Event Management</h1>
+
+    <!-- Event Creation Form -->
+    <form action="/submit_event" method="post" onsubmit="confirmSubmission()">
+        <label for="event_name">Event Name:</label>
+        <input type="text" id="event_name" name="event_name" required>
+
+        <label for="event_date">Event Date:</label>
+        <input type="date" id="event_date" name="event_date" required>
+
+        <label for="start_time">Start Time:</label>
+        <input type="time" id="start_time" name="start_time" required>
+
+        <label for="stop_time">End Time:</label>
+        <input type="time" id="stop_time" name="stop_time" required>
+
+        <label for="event_location">Event Location (Latitude,Longitude):</label>
+        <input type="text" id="event_location" name="event_location" required placeholder="e.g., 40.7128,-74.0060">
+
+        <button type="submit">Create Event</button>
+    </form>
+
+    <!-- Event List Display -->
+    <h2>📅 Scheduled Events</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Event ID</th>
+                <th>Name</th>
+                <th>Date</th>
+                <th>Start Time</th>
+                <th>End Time</th>
+                <th>Location</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for event in events %}
+            <tr>
+                <td>{{ event['eventID'] }}</td>
+                <td>{{ event['eventName'] }}</td>
+                <td>{{ event['eventDate'] }}</td>
+                <td>{{ event['startTime'] }}</td>
+                <td>{{ event['stopTime'] }}</td>
+                <td>{{ event['eventLocation'] }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+</body>
+</html>
