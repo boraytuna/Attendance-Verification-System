@@ -3,37 +3,59 @@
 <head>
     <meta charset="UTF-8">
     <title>Professor Dashboard - Event Management</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script>
-        function confirmSubmission() {
-            alert("Event created successfully!");
+        let map;
+        let selectedLocation = "";
+
+        function initMap() {
+            map = L.map('map').setView([40.7128, -74.0060], 10); // Default to NYC
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 18,
+            }).addTo(map);
+
+            let marker;
+
+            map.on('click', function(e) {
+                if (marker) {
+                    map.removeLayer(marker);
+                }
+                marker = L.marker(e.latlng).addTo(map);
+                selectedLocation = `${e.latlng.lat},${e.latlng.lng}`;
+                document.getElementById('event_location').value = selectedLocation;
+            });
         }
     </script>
     <style>
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 40px;
-            background-color: #f3f6f9;
+            font-family: 'Segoe UI', sans-serif;
+            margin: 30px;
+            background-color: #f5f6f7;
             color: #333;
         }
         h1 {
             color: #0056b3;
+            margin-bottom: 20px;
         }
         form {
             background-color: #fff;
             padding: 20px;
             border-radius: 10px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
             margin-bottom: 30px;
-            max-width: 500px;
+            max-width: 600px;
         }
         label {
             font-weight: bold;
+            display: block;
+            margin-top: 15px;
         }
         input, button {
-            margin-top: 10px;
+            margin-top: 5px;
             padding: 10px;
             width: 100%;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             border: 1px solid #ccc;
             border-radius: 5px;
             box-sizing: border-box;
@@ -47,15 +69,22 @@
         button:hover {
             background-color: #004494;
         }
+        #map {
+            height: 300px;
+            width: 100%;
+            margin-top: 20px;
+            border: 2px solid #ccc;
+            border-radius: 10px;
+        }
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 20px;
+            margin-top: 30px;
             background-color: #fff;
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
         }
         th, td {
-            padding: 15px;
+            padding: 12px;
             border: 1px solid #ccc;
             text-align: left;
         }
@@ -65,12 +94,12 @@
         }
     </style>
 </head>
-<body>
+<body onload="initMap()">
 
     <h1>🎓 Professor Dashboard - Event Management</h1>
 
     <!-- Event Creation Form -->
-    <form action="/submit_event" method="post" onsubmit="confirmSubmission()">
+    <form action="/submit_event" method="post">
         <label for="event_name">Event Name:</label>
         <input type="text" id="event_name" name="event_name" required>
 
@@ -83,8 +112,11 @@
         <label for="stop_time">End Time:</label>
         <input type="time" id="stop_time" name="stop_time" required>
 
-        <label for="event_location">Event Location (Latitude,Longitude):</label>
-        <input type="text" id="event_location" name="event_location" required placeholder="e.g., 40.7128,-74.0060">
+        <!-- Hidden field for event location -->
+        <input type="hidden" id="event_location" name="event_location" required>
+
+        <h3>🗺️ Select Event Location:</h3>
+        <div id="map"></div>
 
         <button type="submit">Create Event</button>
     </form>
@@ -99,7 +131,7 @@
                 <th>Date</th>
                 <th>Start Time</th>
                 <th>End Time</th>
-                <th>Location</th>
+                <th>Location (Lat,Lng)</th>
             </tr>
         </thead>
         <tbody>
