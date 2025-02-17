@@ -2,34 +2,46 @@
 {% block content %}
 
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <title>Event Management</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script async defer
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAzf_3rNo5yi24L3Mu35o5VHaw1PwVmeTs&callback=initMap">
+        </script>
     <script>
         let map;
         let selectedLocation = "";
 
         function initMap() {
-            // Center on Saint Bonaventure University
-            map = L.map('map').setView([42.0792, -78.4823], 15);
+            var school = { lat: 42.0792, lng: -78.4823 };
 
-            // Add OpenStreetMap tiles
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 18,
-            }).addTo(map);
+            var map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 15,
+                center: school
+            });
 
-            let marker;
+            var marker = new google.maps.Marker({
+                position: school,
+                map: map,
+                draggable: true
+            });
 
-            // Handle map clicks to select event location
-            map.on('click', function(e) {
-                if (marker) {
-                    map.removeLayer(marker);
-                }
-                marker = L.marker(e.latlng).addTo(map);
-                selectedLocation = `${e.latlng.lat},${e.latlng.lng}`;
-                document.getElementById('event_location').value = selectedLocation;
+            var geocoder = new google.maps.Geocoder();
+
+            marker.addListener('dragend', function (event) {
+                var lat = event.latLng.lat();
+                var lng = event.latLng.lng();
+                document.getElementById('event_location').value = `${lat},${lng}`;
+
+                // Convert lat/lng to address
+                geocoder.geocode({ location: { lat: lat, lng: lng } }, function (results, status) {
+                    if (status === 'OK' && results[0]) {
+                        document.getElementById('event_address').value = results[0].formatted_address;
+                    } else {
+                        console.error("Geocode error: " + status);
+                    }
+                });
             });
 
             // Fetch and display existing events
@@ -37,8 +49,18 @@
                 .then(response => response.json())
                 .then(events => {
                     events.forEach(event => {
-                        let eventMarker = L.marker([event.latitude, event.longitude]).addTo(map);
-                        eventMarker.bindPopup(`<b>${event.eventName}</b><br>${event.eventDate}`);
+                        let eventMarker = new google.maps.Marker({
+                            position: { lat: event.latitude, lng: event.longitude },
+                            map: map
+                        });
+
+                        let infoWindow = new google.maps.InfoWindow({
+                            content: `<b>${event.eventName}</b><br>${event.eventDate}<br>${event.eventAddress}`
+                        });
+
+                        eventMarker.addListener("click", () => {
+                            infoWindow.open(map, eventMarker);
+                        });
                     });
                 })
                 .catch(error => console.error("Error loading events:", error));
@@ -51,24 +73,29 @@
             background-color: #f5f6f7;
             color: #333;
         }
+
         h1 {
             color: #0056b3;
             margin-bottom: 20px;
         }
+
         form {
             background-color: #fff;
             padding: 20px;
             border-radius: 10px;
-            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
             margin-bottom: 30px;
             max-width: 600px;
         }
+
         label {
             font-weight: bold;
             display: block;
             margin-top: 15px;
         }
-        input, button {
+
+        input,
+        button {
             margin-top: 5px;
             padding: 10px;
             width: 100%;
@@ -77,15 +104,18 @@
             border-radius: 5px;
             box-sizing: border-box;
         }
+
         button {
             background-color: #0056b3;
             color: #fff;
             cursor: pointer;
             transition: background-color 0.3s;
         }
+
         button:hover {
             background-color: #004494;
         }
+
         #map {
             height: 300px;
             width: 100%;
@@ -93,24 +123,29 @@
             border: 2px solid #ccc;
             border-radius: 10px;
         }
+
         table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 30px;
             background-color: #fff;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
         }
-        th, td {
+
+        th,
+        td {
             padding: 12px;
             border: 1px solid #ccc;
             text-align: left;
         }
+
         th {
             background-color: #0056b3;
             color: #fff;
         }
     </style>
 </head>
+
 <body onload="initMap()">
 
     <h1>🎓 Event Management</h1>
@@ -131,7 +166,7 @@
 
         <!-- Hidden field for event location -->
         <input type="hidden" id="event_location" name="event_location" required>
-
+        <input type="hidden" id="event_address" name="event_address">
         <h3>🗺️ Select Event Location:</h3>
         <div id="map"></div>
 
@@ -139,36 +174,38 @@
     </form>
 
     <!-- Event List Display -->
-<h2>📅 Scheduled Events</h2>
-<table>
-    <thead>
-        <tr>
-            <th>Event Name</th>
-            <th>Date</th>
-            <th>Start Time</th>
-            <th>Location</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for event in events %}
-        <tr>
-            <td>{{ event['eventName'] }}</td>
-            <td>{{ event['eventDate'] }}</td>
-            <td>{{ event['startTime'] }}</td>
-            <td>
-                {% if 'latitude' in event and 'longitude' in event %}
+    <h2>📅 Scheduled Events</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Event Name</th>
+                <th>Date</th>
+                <th>Start Time</th>
+                <th>Location</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for event in events %}
+            <tr>
+                <td>{{ event['eventName'] }}</td>
+                <td>{{ event['eventDate'] }}</td>
+                <td>{{ event['startTime'] }}</td>
+                <td>
+                    {% if event['eventAddress'] %}
+                    {{ event['eventAddress'] }}
+                    {% else %}
                     {{ event['latitude'] }}, {{ event['longitude'] }}
-                {% else %}
-                    {{ event['eventLocation'] }}
-                {% endif %}
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+                    {% endif %}
+                </td>
+
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 
 
 </body>
+
 </html>
 
 {% endblock %}
