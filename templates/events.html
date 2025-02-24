@@ -1,0 +1,226 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Event Management</title>
+    <script async defer
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAzf_3rNo5yi24L3Mu35o5VHaw1PwVmeTs&callback=initMap">
+    </script>
+    <script>
+        let map;
+        function initMap() {
+            var school = { lat: 42.0792, lng: -78.4823 };
+
+            var map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 15,
+                center: school
+            });
+
+            var marker = new google.maps.Marker({
+                position: school,
+                map: map,
+                draggable: true
+            });
+
+            var geocoder = new google.maps.Geocoder();
+
+            marker.addListener('dragend', function (event) {
+                var lat = event.latLng.lat();
+                var lng = event.latLng.lng();
+                document.getElementById('event_location').value = `${lat},${lng}`;
+
+                // Convert lat/lng to address
+                geocoder.geocode({ location: { lat: lat, lng: lng } }, function (results, status) {
+                    if (status === 'OK' && results[0]) {
+                        document.getElementById('event_address').value = results[0].formatted_address;
+                    } else {
+                        console.error("Geocode error: " + status);
+                    }
+                });
+            });
+
+            // Fetch and display existing events
+            fetch("/api/events")
+                .then(response => response.json())
+                .then(events => {
+                    events.forEach(event => {
+                        let eventMarker = new google.maps.Marker({
+                            position: { lat: event.latitude, lng: event.longitude },
+                            map: map
+                        });
+
+                        let infoWindow = new google.maps.InfoWindow({
+                            content: `<b>${event.eventName}</b><br>${event.eventDate}<br>${event.eventAddress}`
+                        });
+
+                        eventMarker.addListener("click", () => {
+                            infoWindow.open(map, eventMarker);
+                        });
+                    });
+                })
+                .catch(error => console.error("Error loading events:", error));
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            margin: 30px;
+            background-color: #f5f6f7;
+            color: #333;
+        }
+
+        h1 {
+            color: #0056b3;
+            margin-bottom: 20px;
+        }
+
+        form {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            margin-bottom: 30px;
+            max-width: 600px;
+        }
+
+        label {
+            font-weight: bold;
+            display: block;
+            margin-top: 15px;
+        }
+
+        input,
+        button {
+            margin-top: 5px;
+            padding: 10px;
+            width: 100%;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+
+        button {
+            background-color: #0056b3;
+            color: #fff;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #004494;
+        }
+
+        #map {
+            height: 300px;
+            width: 100%;
+            margin-top: 20px;
+            border: 2px solid #ccc;
+            border-radius: 10px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 30px;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        th,
+        td {
+            padding: 12px;
+            border: 1px solid #ccc;
+            text-align: left;
+        }
+
+        th {
+            background-color: #0056b3;
+            color: #fff;
+        }
+
+        .qr-buttons {
+            display: flex;
+            gap: 5px;
+        }
+
+        .qr-buttons button {
+            width: auto;
+            padding: 8px 12px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body onload="initMap()">
+
+    <h1>🎓 Event Management</h1>
+
+    <!-- Event Creation Form -->
+    <form action="/submit_event" method="post">
+        <label for="event_name">Event Name:</label>
+        <input type="text" id="event_name" name="event_name" required>
+
+        <label for="event_date">Event Date:</label>
+        <input type="date" id="event_date" name="event_date" required>
+
+        <label for="start_time">Start Time:</label>
+        <input type="time" id="start_time" name="start_time" required>
+
+        <label for="stop_time">End Time:</label>
+        <input type="time" id="stop_time" name="stop_time" required>
+
+        <!-- Hidden field for event location -->
+        <input type="hidden" id="event_location" name="event_location" required>
+        <input type="hidden" id="event_address" name="event_address">
+        <h3>🗺️ Select Event Location:</h3>
+        <div id="map"></div>
+
+        <button type="submit">Create Event</button>
+    </form>
+
+    <!-- Event List Display -->
+    <h2>📅 Scheduled Events</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Event Name</th>
+                <th>Date</th>
+                <th>Start Time</th>
+                <th>Location</th>
+                <th>QR Code</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for event in events %}
+            <tr>
+                <td>{{ event['eventName'] }}</td>
+                <td>{{ event['eventDate'] }}</td>
+                <td>{{ event['startTime'] }}</td>
+                <td>
+                    {% if event['eventAddress'] %}
+                    {{ event['eventAddress'] }}
+                    {% else %}
+                    {{ event['latitude'] }}, {{ event['longitude'] }}
+                    {% endif %}
+                </td>
+                <td>
+                    <div class="qr-buttons">
+                        <a href="/qr_code/{{ event['eventID'] }}">
+                            <button>View QR Code</button>
+                        </a>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+</body>
+
+</html>
+
+{% endblock %}
