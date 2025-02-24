@@ -5,7 +5,7 @@ app = Flask(__name__)
 
 def query_db(query, args=(), one=False):
     """Helper function to query the SQLite database."""
-    conn = sqlite3.connect('fake.db')  # Ensure this matches your database
+    conn = sqlite3.connect('fake.db')
     cursor = conn.cursor()
     cursor.execute(query, args)
     results = cursor.fetchall()
