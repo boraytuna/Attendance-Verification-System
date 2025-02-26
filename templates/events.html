@@ -45,26 +45,85 @@
             });
 
             // Fetch and display existing events
+            // Fetch stored locations and populate dropdown
             fetch("/api/events")
                 .then(response => response.json())
                 .then(events => {
+                    var select = document.getElementById("saved_locations");
+
                     events.forEach(event => {
-                        let eventMarker = new google.maps.Marker({
-                            position: { lat: event.latitude, lng: event.longitude },
-                            map: map
-                        });
-
-                        let infoWindow = new google.maps.InfoWindow({
-                            content: `<b>${event.eventName}</b><br>${event.eventDate}<br>${event.eventAddress}`
-                        });
-
-                        eventMarker.addListener("click", () => {
-                            infoWindow.open(map, eventMarker);
-                        });
+                        var option = document.createElement("option");
+                        option.value = `${event.latitude},${event.longitude}`;
+                        option.textContent = event.eventAddress;
+                        select.appendChild(option);
                     });
                 })
-                .catch(error => console.error("Error loading events:", error));
+                .catch(error => console.error("Error fetching locations:", error));
+
+            // Handle location selection
+            window.handleLocationSelection = function () {
+                var selectedValue = document.getElementById("saved_locations").value;
+                var locationError = document.getElementById("location_error");
+
+                if (selectedValue === "show_map") {
+                    // Show the map if "Show Map" is selected
+                    document.getElementById("map-container").style.display = "block";
+
+                    if (!map) {
+                        map = new google.maps.Map(document.getElementById("map"), {
+                            zoom: 15,
+                            center: defaultCenter
+                        });
+
+                        marker = new google.maps.Marker({
+                            position: defaultCenter,
+                            map: map,
+                            draggable: true
+                        });
+
+                        marker.addListener('dragend', function (event) {
+                            var lat = event.latLng.lat();
+                            var lng = event.latLng.lng();
+                            document.getElementById('event_location').value = `${lat},${lng}`;
+
+                            geocoder.geocode({ location: { lat: lat, lng: lng } }, function (results, status) {
+                                if (status === 'OK' && results[0]) {
+                                    document.getElementById('event_address').value = results[0].formatted_address;
+                                } else {
+                                    console.error("Geocode error: " + status);
+                                }
+                            });
+                        });
+                    }
+                } else if (selectedValue) {
+                    // If a saved location is chosen
+                    document.getElementById("map-container").style.display = "none";  // Hide the map
+                    var [lat, lng] = selectedValue.split(",").map(Number);
+                    document.getElementById("event_location").value = `${lat},${lng}`;
+                    document.getElementById("event_address").value = document.getElementById("saved_locations").options[document.getElementById("saved_locations").selectedIndex].text;
+                }
+
+                // If a valid location is chosen, remove error
+                if (selectedValue || document.getElementById("event_location").value) {
+                    locationError.style.display = "none";
+                }
+            };
+
+            // Ensure at least one location is selected before submission
+            window.validateLocation = function (event) {
+                var location = document.getElementById("event_location").value;
+                var selectedValue = document.getElementById("saved_locations").value;
+                var locationError = document.getElementById("location_error");
+
+                if (!location && !selectedValue) {
+                    event.preventDefault(); // Prevent form submission
+                    locationError.style.display = "block";
+                }
+            };
+
         }
+
+
     </script>
     <style>
         body {
@@ -164,13 +223,26 @@
         <label for="stop_time">End Time:</label>
         <input type="time" id="stop_time" name="stop_time" required>
 
-        <!-- Hidden field for event location -->
-        <input type="hidden" id="event_location" name="event_location" required>
-        <input type="hidden" id="event_address" name="event_address">
-        <h3>🗺️ Select Event Location:</h3>
-        <div id="map"></div>
+        <label for="saved_locations">Choose a Location:</label>
+        <select id="saved_locations" onchange="handleLocationSelection()">
+            <option value="">-- Select a saved location --</option>
+            <option value="show_map">🔍 Show Map (Pick a New Location)</option>
+        </select>
 
-        <button type="submit">Create Event</button>
+        <!-- Hidden inputs to store selected lat/lng and address -->
+        <input type="hidden" id="event_location" name="event_location">
+        <input type="hidden" id="event_address" name="event_address">
+
+        <!-- Map is initially hidden -->
+        <div id="map-container" style="display: none;">
+            <h3>🗺️ Select a New Location on the Map:</h3>
+            <div id="map" style="height: 400px; width: 100%;"></div>
+        </div>
+
+        <!-- Error message -->
+        <p id="location_error" style="color: red; display: none;">⚠️ Please select a location before submitting.</p>
+
+        <button type="submit" onclick="validateLocation(event)">Create Event</button>
     </form>
 
     <!-- Event List Display -->
