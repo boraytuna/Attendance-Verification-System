@@ -112,7 +112,8 @@ def get_or_create_qr_code(event_id):
         return qr_code_path  # Return existing QR code
 
     # Generate new QR code that directs to the student interface
-    qr_url = f"http://127.0.0.1:5000/student_interface/{event_id}"
+    #qr_url = f"http://127.0.0.1:5000/student_interface/{event_id}"
+    qr_url = f"http://192.168.1.100:5000/student_checkin/{event_id}" #temp - Joie was using this IP to test on her local network
     qr = segno.make(qr_url)
     qr.save(qr_code_path, scale=10)
 
@@ -125,18 +126,29 @@ def serve_qr_code(event_id):
     return send_file(qr_code_path, mimetype="image/png")
 
 # **Route: Student Interface**
-@app.route("/student_interface/<int:event_id>")
-@app.route("/student_interface/<int:event_id>/<int:page>")
-def student_interface(event_id, page=1):
-    """Serve the student interface pages for a specific event."""
-    return render_template(f"student{page}.html", eventID=event_id)
+@app.route("/student_checkin/<int:event_id>")
+#@app.route("/student_checkin/<int:event_id>/<int:page>")
+def student_interface(event_id):
+    """Serve the student interface pages for a specific event.
+    Pass the eventID and eventName to the HTML template."""
+    #get the event name associated with the eventID
+    conn = get_db_connection()
+    event = get_db_connection().cursor().execute("SELECT eventName FROM events WHERE eventID = ?", (event_id,)).fetchone()
+    conn.close()
+    event_name = event["eventName"]
+    return render_template("student_checkin.html", eventID=event_id, eventName=event_name)
 
 # **API Routes for Course & Professor Search**
 @app.route('/search_courses', methods=['GET'])
 def search_courses():
     """Search for courses based on user input."""
+    #TEMPORARY - connect to fake DB
+    conn = sqlite3.connect("fake.db")
+    conn.row_factory = sqlite3.Row  # Enables dictionary-style access
+    conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
+
     search_term = request.args.get('query', '')
-    conn = get_db_connection()
+    #conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT course_name FROM Courses WHERE course_name LIKE ?", (f"%{search_term}%",))
     results = cursor.fetchall()
@@ -146,13 +158,40 @@ def search_courses():
 @app.route('/search_professors', methods=['GET'])
 def search_professors():
     """Search for professors based on user input."""
+    #TEMPORARY - connect to fake DB
+    conn = sqlite3.connect("fake.db")
+    conn.row_factory = sqlite3.Row  # Enables dictionary-style access
+    conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
+
     search_term = request.args.get('query', '')
-    conn = get_db_connection()
+    #conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT professor_name FROM Professor WHERE professor_name LIKE ?", (f"%{search_term}%",))
     results = cursor.fetchall()
     conn.close()
     return jsonify([row[0] for row in results])
+# Route: Handle Student Check-In
+@app.route('/submit_student_checkin', methods=['POST'])
+def submit_student_checkin():
+    data = request.json
+    studentID = data['studentID']
+    firstName = data['firstName']
+    lastName = data['lastName']
+    email = data['email']
+    classForExtraCredit = data['classForExtraCredit']
+    professorForExtraCredit = data['professorForExtraCredit']
+    scannedEventID = data['scannedEventID']
+    studentLocation = data['studentLocation']
+
+    conn = get_db_connection()
+    conn.cursor().execute('''
+        INSERT INTO student_checkins (studentID, firstName, lastName, email, classForExtraCredit, professorForExtraCredit, scannedEventID, studentLocation)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+        (studentID, firstName, lastName, email, classForExtraCredit, professorForExtraCredit, scannedEventID, studentLocation))
+    conn.commit()
+    conn.close()
+
+    return jsonify({'status': 'success'})
 
 # Route: Handle Event Creation
 @app.route("/submit_event", methods=["POST"])

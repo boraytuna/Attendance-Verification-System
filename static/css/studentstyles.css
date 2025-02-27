@@ -27,16 +27,20 @@ h1 {
 /* content refers to all elements in each frame
 besides heading (Student Attendance Form) and
 bottom button (that navigates between frames) */
+
 .content {
     width: 80%;
-    height: 45%;
+    height: 80%;
     text-align: center;
+    align-items: center;
+    justify-content: center;
+    margin: auto;
 }
 .content form {
     width: 100%;
-    height: 60%;
     display: flex;
     flex-direction: column;
+    margin-bottom: 2rem;
 }
 .content form label {
     margin-top: 3rem;
