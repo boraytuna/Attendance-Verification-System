@@ -1,13 +1,28 @@
-from flask import Flask, render_template, request, redirect, jsonify, send_file
+from flask import Flask, session, render_template, request, redirect, jsonify, send_file
+from flask_mail import Mail, Message
 import sqlite3
 import os
 import segno
 import requests
+import random
 
 app = Flask(__name__)
 
 DATABASE_NAME = "attendance.db"
 QR_CODE_FOLDER = "qr_codes"
+
+#session key
+app.secret_key = os.urandom(24)
+
+#mail server configuration
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USE_SSL'] = False
+app.config['MAIL_USERNAME'] = 'jrosestangle@gmail.com'
+app.config['MAIL_PASSWORD'] = 'pfdbqlrqisxzubmf' #app pw
+app.config['MAIL_DEFAULT_SENDER'] = 'jrosestangle@gmail.com'
+mail = Mail(app)
 
 if not os.path.exists(QR_CODE_FOLDER):
     os.makedirs(QR_CODE_FOLDER)
@@ -113,7 +128,8 @@ def get_or_create_qr_code(event_id):
 
     # Generate new QR code that directs to the student interface
     #qr_url = f"http://127.0.0.1:5000/student_interface/{event_id}"
-    qr_url = f"http://192.168.1.100:5000/student_checkin/{event_id}" #temp - Joie was using this IP to test on her local network
+    qr_url = f"http://192.168.1.100:5000/student_checkin/{event_id}" #temp - Joie was using this IP to test on her local network (address for home network)
+    #qr_url = f"http://172.20.10.12:5000/student_checkin/{event_id}" #temp - Joie was using this IP to test on her local network (address for phone hotspot)
     qr = segno.make(qr_url)
     qr.save(qr_code_path, scale=10)
 
@@ -137,6 +153,47 @@ def student_interface(event_id):
     conn.close()
     event_name = event["eventName"]
     return render_template("student_checkin.html", eventID=event_id, eventName=event_name)
+
+# **API Routes for Student Check-In Email Verification**
+@app.route('/verify_email', methods=['POST'])
+def send_email():
+    data = request.get_json()
+    email = data.get('email')
+
+    #generate a random 6 digit code
+    code = ''
+    for i in range(6):
+        num = random.randint(0, 9)
+        code += str(num)
+
+    #store the code in the session
+    session['verification_code'] = code 
+
+    body_msg = 'Your email verification code for student check-in is: ' + code
+    msg = Message (
+        'Student Check-In Code',
+        recipients=[email],
+        body=body_msg
+    )
+
+    try:
+        mail.send(msg)
+        return 'Sent', 200
+    except Exception as e:
+        return str(e), 500
+
+@app.route('/verify_code', methods=['POST'])
+def verify_code():
+    data = request.get_json()
+    code = data.get('code')
+
+    if 'verification_code' not in session:
+        return jsonify({'error': 'Session expired'}), 400
+    
+    if code == session['verification_code']:
+        return jsonify({'message': 'Code verified'}), 200
+    else:
+        return jsonify({'error': 'Invalid code'}), 400
 
 # **API Routes for Course & Professor Search**
 @app.route('/search_courses', methods=['GET'])
@@ -170,7 +227,8 @@ def search_professors():
     results = cursor.fetchall()
     conn.close()
     return jsonify([row[0] for row in results])
-# Route: Handle Student Check-In
+
+# **API Route for Submitting Student Check-In Form**
 @app.route('/submit_student_checkin', methods=['POST'])
 def submit_student_checkin():
     data = request.json

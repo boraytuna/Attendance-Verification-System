@@ -2,6 +2,7 @@
 <html>
 <head>
     <title>Student Check-In</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Kadwa:wght@400;700&display=swap" rel="stylesheet">
@@ -43,9 +44,9 @@
             <h1>Student Attendance Form</h1>
             <form>
                 <label for="securityCode">Enter security code</label>
-                <input type="text" id="securityCode" name="securityCode" placeholder="Security Code" required>
+                <input type="text" id="securityCode" name="securityCode" placeholder="Security Code" minlength="6" maxlength="6" required>
             </form>
-            <button id="btnSubmitFrame2">Next</button>
+            <button id="btnSubmitFrame2">Verify Code</button>
         </div>
     </section>
 

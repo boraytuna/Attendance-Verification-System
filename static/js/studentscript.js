@@ -31,15 +31,59 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     //button to move from frame 2 to frame 3
-    const btnSubmitFrame2 = document.getElementById("btnSubmitFrame2");
+    /* const btnSubmitFrame2 = document.getElementById("btnSubmitFrame2");
     btnSubmitFrame2.addEventListener("click", function () {
         showFrame(2);
-    });
+    }); */
 
     //button to move from frame 3 to frame 4
     const btnSubmitFrame3 = document.getElementById("btnSubmitFrame3");
     btnSubmitFrame3.addEventListener("click", function () {
         showFrame(3);
+    });
+
+    ///// Frame 1 - Verify Email Button Action /////
+    document.getElementById("btnSubmitFrame1").addEventListener("click", function(e) {
+        e.preventDefault(); //prevent form submission and page refresh
+
+        let email = document.getElementById("studentEmail").value;
+        fetch('/verify_email', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                email: email
+            })
+        })
+        .then(response => response.text()) //response from server
+        .catch(error => console.error('Error:', error)) //error handling
+    });
+
+    ///// Frame 2 - Verify Code Button Action /////
+    document.getElementById("btnSubmitFrame2").addEventListener("click", function(e) {
+        e.preventDefault(); //prevent form submission and page refresh
+
+        let code = document.getElementById("securityCode").value;
+        fetch('/verify_code', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                code: code
+            })
+        })
+        .then(response => response.json()) //response from server
+        .then(data => {
+            if (data.message == 'Code verified') {
+                alert(data.message); //display the success message returned from verify_code()
+                showFrame(2); //move from frame 2 to frame 3
+            } else {
+                alert(data.error); //display the error message returned from verify_code()
+            }
+        })
+        .catch(error => console.error('Error:', error)) //error handling
     });
 
     ///// Frame 3 - Professor and Course Suggestion Autopopulation /////
