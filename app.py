@@ -44,7 +44,6 @@ def create_tables():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS student_checkins (
             checkinID INTEGER PRIMARY KEY AUTOINCREMENT,
-            studentID TEXT NOT NULL,
             firstName TEXT NOT NULL,
             lastName TEXT NOT NULL,
             email TEXT NOT NULL,
@@ -174,7 +173,6 @@ def search_professors():
 @app.route('/submit_student_checkin', methods=['POST'])
 def submit_student_checkin():
     data = request.json
-    studentID = data['studentID']
     firstName = data['firstName']
     lastName = data['lastName']
     email = data['email']
@@ -185,9 +183,9 @@ def submit_student_checkin():
 
     conn = get_db_connection()
     conn.cursor().execute('''
-        INSERT INTO student_checkins (studentID, firstName, lastName, email, classForExtraCredit, professorForExtraCredit, scannedEventID, studentLocation)
+        INSERT INTO student_checkins (firstName, lastName, email, classForExtraCredit, professorForExtraCredit, scannedEventID, studentLocation)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-        (studentID, firstName, lastName, email, classForExtraCredit, professorForExtraCredit, scannedEventID, studentLocation))
+        (firstName, lastName, email, classForExtraCredit, professorForExtraCredit, scannedEventID, studentLocation))
     conn.commit()
     conn.close()
 

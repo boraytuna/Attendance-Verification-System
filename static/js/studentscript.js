@@ -72,7 +72,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
     //todo - ensure fields are valid and requirements met before submitting (e.g. agreed to privacy policies)
     btnSubmitFrame3.addEventListener("click", function () {
-        let studentID = "temporary string"; //todo - get student ID from form or remove from schema
         let firstName = document.getElementById("firstName").value;
         let lastName = document.getElementById("lastName").value;
         let email = document.getElementById("studentEmail").value;
@@ -87,7 +86,6 @@ document.addEventListener("DOMContentLoaded", function () {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                studentID: studentID,
                 firstName: firstName,
                 lastName: lastName,
                 email: email,
