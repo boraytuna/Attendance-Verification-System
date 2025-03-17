@@ -112,8 +112,8 @@ def get_or_create_qr_code(event_id):
         return qr_code_path  # Return existing QR code
 
     # Generate new QR code that directs to the student interface
-    #qr_url = f"http://127.0.0.1:5000/student_interface/{event_id}"
-    qr_url = f"http://192.168.1.100:5000/student_checkin/{event_id}" #temp - Joie was using this IP to test on her local network
+    qr_url = f"http://127.0.0.1:5000/student_checkin/{event_id}"
+    #qr_url = f"http://192.168.1.100:5000/student_checkin/{event_id}" #temp - Joie was using this IP to test on her local network
     qr = segno.make(qr_url)
     qr.save(qr_code_path, scale=10)
 
@@ -246,6 +246,7 @@ def get_events():
 
     events_list = [dict(event) for event in events]
     return jsonify(events_list)
+
 
 if __name__ == "__main__":
     app.run(debug=True)

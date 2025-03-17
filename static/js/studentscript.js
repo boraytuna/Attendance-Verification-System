@@ -1,7 +1,7 @@
 document.addEventListener("DOMContentLoaded", function () {
     ///// Navigation Between Frames /////
     const allFrames = document.getElementsByTagName("section");
-    
+
     //Get the index of the current visible frame
     function getCurrentFrame() {
         for (let i = 0; i < allFrames.length; i++) {
