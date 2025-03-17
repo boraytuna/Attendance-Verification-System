@@ -59,7 +59,6 @@ def create_tables():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS student_checkins (
             checkinID INTEGER PRIMARY KEY AUTOINCREMENT,
-            studentID TEXT NOT NULL,
             firstName TEXT NOT NULL,
             lastName TEXT NOT NULL,
             email TEXT NOT NULL,
@@ -127,8 +126,8 @@ def get_or_create_qr_code(event_id):
         return qr_code_path  # Return existing QR code
 
     # Generate new QR code that directs to the student interface
-    #qr_url = f"http://127.0.0.1:5000/student_interface/{event_id}"
-    qr_url = f"http://192.168.1.100:5000/student_checkin/{event_id}" #temp - Joie was using this IP to test on her local network (address for home network)
+    qr_url = f"http://127.0.0.1:5000/student_checkin/{event_id}" #temp - Boray was using on his laptop
+    #qr_url = f"http://192.168.1.100:5000/student_checkin/{event_id}" #temp - Joie was using this IP to test on her local network (address for home network)
     #qr_url = f"http://172.20.10.12:5000/student_checkin/{event_id}" #temp - Joie was using this IP to test on her local network (address for phone hotspot)
     qr = segno.make(qr_url)
     qr.save(qr_code_path, scale=10)
@@ -232,7 +231,6 @@ def search_professors():
 @app.route('/submit_student_checkin', methods=['POST'])
 def submit_student_checkin():
     data = request.json
-    studentID = data['studentID']
     firstName = data['firstName']
     lastName = data['lastName']
     email = data['email']
@@ -243,9 +241,9 @@ def submit_student_checkin():
 
     conn = get_db_connection()
     conn.cursor().execute('''
-        INSERT INTO student_checkins (studentID, firstName, lastName, email, classForExtraCredit, professorForExtraCredit, scannedEventID, studentLocation)
+        INSERT INTO student_checkins (firstName, lastName, email, classForExtraCredit, professorForExtraCredit, scannedEventID, studentLocation)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-        (studentID, firstName, lastName, email, classForExtraCredit, professorForExtraCredit, scannedEventID, studentLocation))
+        (firstName, lastName, email, classForExtraCredit, professorForExtraCredit, scannedEventID, studentLocation))
     conn.commit()
     conn.close()
 
