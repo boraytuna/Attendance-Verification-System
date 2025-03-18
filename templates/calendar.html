@@ -1,6 +1,63 @@
-<!-- calendar.html -->
 {% extends 'base.html' %}
-
 {% block content %}
-    <h1>Calendar</h1>
+
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Event Calendar</title>
+
+    <!-- FullCalendar CSS & JS -->
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            margin: 30px;
+            background-color: #f5f6f7;
+            color: #333;
+        }
+
+        #calendar {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>📅 Event Calendar</h1>
+    <div id="calendar"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var calendarEl = document.getElementById('calendar');
+            var calendar = new FullCalendar.Calendar(calendarEl, {
+                initialView: 'dayGridMonth',
+                headerToolbar: {
+                    left: 'prev,next today',
+                    center: 'title',
+                    right: 'dayGridMonth,timeGridWeek,timeGridDay'
+                },
+                events: "/api/events",  // Fetch events from the updated API
+
+                eventClick: function (info) {
+                    alert(`📍 Event: ${info.event.title}\n🗓️ Date: ${info.event.start.toISOString().split('T')[0]}\n⏰ Time: ${info.event.start.toTimeString().split(' ')[0]} - ${info.event.end.toTimeString().split(' ')[0]}\n📍 Location: ${info.event.extendedProps.location}`);
+                }
+            });
+
+            calendar.render();
+        });
+    </script>
+
+</body>
+
+</html>
+
 {% endblock %}

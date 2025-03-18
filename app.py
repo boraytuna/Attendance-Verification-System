@@ -1,16 +1,90 @@
-from flask import Flask, render_template, request, redirect, jsonify
+from flask import Flask, render_template, request, redirect, jsonify, send_file
 import sqlite3
+import os
+import segno
 import requests
 
 app = Flask(__name__)
-DATABASE_NAME = "attendance.db"
 
-# Connect to SQLite
+DATABASE_NAME = "attendance.db"
+QR_CODE_FOLDER = "qr_codes"
+
+if not os.path.exists(QR_CODE_FOLDER):
+    os.makedirs(QR_CODE_FOLDER)
+
+GOOGLE_API_KEY = "AIzaSyAzf_3rNo5yi24L3Mu35o5VHaw1PwVmeTs"  # Replace with your actual Google API key
+
+# Function to connect to SQLite
 def get_db_connection():
     conn = sqlite3.connect(DATABASE_NAME)
-    conn.row_factory = sqlite3.Row
-    conn.execute('PRAGMA foreign_keys = ON')  # Enable foreign key constraints
+    conn.row_factory = sqlite3.Row  # Enables dictionary-style access
+    conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
     return conn
+
+# Function to create tables
+def create_tables():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Create Events Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS events (
+            eventID INTEGER PRIMARY KEY AUTOINCREMENT,
+            eventName TEXT NOT NULL,
+            eventDate DATE NOT NULL,
+            startTime TIME NOT NULL,
+            stopTime TIME NOT NULL,
+            latitude REAL NOT NULL,
+            longitude REAL NOT NULL,
+            eventAddress TEXT NOT NULL
+        )
+    ''')
+
+    # Create Student Check-Ins Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS student_checkins (
+            checkinID INTEGER PRIMARY KEY AUTOINCREMENT,
+            studentID TEXT NOT NULL,
+            firstName TEXT NOT NULL,
+            lastName TEXT NOT NULL,
+            email TEXT NOT NULL,
+            classForExtraCredit TEXT NOT NULL,
+            professorForExtraCredit TEXT NOT NULL,
+            scannedEventID INTEGER NOT NULL,
+            studentLocation TEXT NOT NULL,
+            checkinTime DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (scannedEventID) REFERENCES events(eventID)
+        )
+    ''')
+
+    # Create Attendance Status Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS attendance_status (
+            statusID INTEGER PRIMARY KEY AUTOINCREMENT,
+            checkinID INTEGER NOT NULL,
+            attendanceStatus TEXT NOT NULL CHECK (attendanceStatus IN ('Attended', 'Left Early')),
+            FOREIGN KEY (checkinID) REFERENCES student_checkins(checkinID)
+        )
+    ''')
+
+    # Create Places Table
+    # Create Places Table
+    cursor.execute('''
+            CREATE TABLE IF NOT EXISTS places (
+                placeID INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                latitude REAL NOT NULL,
+                longitude REAL NOT NULL,
+                building TEXT NOT NULL,
+                address TEXT NULL
+            )
+        ''')
+
+    conn.commit()
+    conn.close()
+
+# Ensure database tables exist
+create_tables()
 
 # Route: Dashboard
 @app.route("/")
@@ -38,14 +112,105 @@ def calendar():
 def find_student():
     return render_template("find_student.html")
 
-# Route: Places Page
 @app.route("/places")
 def places():
-    return render_template("places.html")
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM places")
+    places = cursor.fetchall()
+    conn.close()
+    return render_template("places.html", places=places)
+
+# Function to generate (or retrieve) QR code
+def get_or_create_qr_code(event_id):
+    qr_code_path = os.path.join(QR_CODE_FOLDER, f"event_{event_id}.png")
+
+    if os.path.exists(qr_code_path):
+        return qr_code_path  # Return existing QR code
+
+    # Generate new QR code that directs to the student interface
+    #qr_url = f"http://127.0.0.1:5000/student_interface/{event_id}"
+    qr_url = f"http://192.168.1.100:5000/student_checkin/{event_id}" #temp - Joie was using this IP to test on her local network
+    qr = segno.make(qr_url)
+    qr.save(qr_code_path, scale=10)
+
+    return qr_code_path
+
+# Route: Serve QR Code
+@app.route("/qr_code/<int:event_id>")
+def serve_qr_code(event_id):
+    qr_code_path = get_or_create_qr_code(event_id)
+    return send_file(qr_code_path, mimetype="image/png")
+
+# **Route: Student Interface**
+@app.route("/student_checkin/<int:event_id>")
+#@app.route("/student_checkin/<int:event_id>/<int:page>")
+def student_interface(event_id):
+    """Serve the student interface pages for a specific event.
+    Pass the eventID and eventName to the HTML template."""
+    #get the event name associated with the eventID
+    conn = get_db_connection()
+    event = get_db_connection().cursor().execute("SELECT eventName FROM events WHERE eventID = ?", (event_id,)).fetchone()
+    conn.close()
+    event_name = event["eventName"]
+    return render_template("student_checkin.html", eventID=event_id, eventName=event_name)
+
+# **API Routes for Course & Professor Search**
+@app.route('/search_courses', methods=['GET'])
+def search_courses():
+    """Search for courses based on user input."""
+    #TEMPORARY - connect to fake DB
+    conn = sqlite3.connect("fake.db")
+    conn.row_factory = sqlite3.Row  # Enables dictionary-style access
+    conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
+
+    search_term = request.args.get('query', '')
+    #conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT course_name FROM Courses WHERE course_name LIKE ?", (f"%{search_term}%",))
+    results = cursor.fetchall()
+    conn.close()
+    return jsonify([row[0] for row in results])
+
+@app.route('/search_professors', methods=['GET'])
+def search_professors():
+    """Search for professors based on user input."""
+    #TEMPORARY - connect to fake DB
+    conn = sqlite3.connect("fake.db")
+    conn.row_factory = sqlite3.Row  # Enables dictionary-style access
+    conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
+
+    search_term = request.args.get('query', '')
+    #conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT professor_name FROM Professor WHERE professor_name LIKE ?", (f"%{search_term}%",))
+    results = cursor.fetchall()
+    conn.close()
+    return jsonify([row[0] for row in results])
+# Route: Handle Student Check-In
+@app.route('/submit_student_checkin', methods=['POST'])
+def submit_student_checkin():
+    data = request.json
+    studentID = data['studentID']
+    firstName = data['firstName']
+    lastName = data['lastName']
+    email = data['email']
+    classForExtraCredit = data['classForExtraCredit']
+    professorForExtraCredit = data['professorForExtraCredit']
+    scannedEventID = data['scannedEventID']
+    studentLocation = data['studentLocation']
+
+    conn = get_db_connection()
+    conn.cursor().execute('''
+        INSERT INTO student_checkins (studentID, firstName, lastName, email, classForExtraCredit, professorForExtraCredit, scannedEventID, studentLocation)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+        (studentID, firstName, lastName, email, classForExtraCredit, professorForExtraCredit, scannedEventID, studentLocation))
+    conn.commit()
+    conn.close()
+
+    return jsonify({'status': 'success'})
 
 # Route: Handle Event Creation
-GOOGLE_API_KEY = "AIzaSyAzf_3rNo5yi24L3Mu35o5VHaw1PwVmeTs"  # Replace with your real Google Maps API Key
-
 @app.route("/submit_event", methods=["POST"])
 def submit_event():
     event_name = request.form["event_name"]
@@ -53,9 +218,10 @@ def submit_event():
     start_time = request.form["start_time"]
     stop_time = request.form["stop_time"]
     event_location = request.form["event_location"]  # Lat,Lng format
-    
+
     if not event_location:
         return jsonify({"message": "Please select a location"}), 400
+
     try:
         lat, lng = map(float, event_location.split(","))
     except ValueError:
@@ -75,24 +241,82 @@ def submit_event():
         INSERT INTO events (eventName, eventDate, startTime, stopTime, latitude, longitude, eventAddress)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     ''', (event_name, event_date, start_time, stop_time, lat, lng, address))
+
+    event_id = cursor.lastrowid  # Get the newly created event ID
     conn.commit()
     conn.close()
 
-    return redirect("/events")
+    # Generate QR Code for this event
+    get_or_create_qr_code(event_id)
 
+    return redirect("/events")
 
 # Route: API endpoint for event list (returns JSON)
 @app.route("/api/events", methods=["GET"])
 def get_events():
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT eventID, eventName, eventDate, startTime, stopTime,latitude, longitude, eventAddress FROM events")
+    cursor.execute(
+        "SELECT eventID, eventName, eventDate, startTime, stopTime, latitude, longitude, eventAddress FROM events")
     events = cursor.fetchall()
     conn.close()
 
     events_list = [dict(event) for event in events]
     return jsonify(events_list)
 
+@app.route('/generate_qr/<int:place_id>')
+def generate_qr(place_id):
+    import qrcode
+    from io import BytesIO
+    import base64
+
+    qr = qrcode.make(f"https://yourwebsite.com/place/{place_id}")
+    buffer = BytesIO()
+    qr.save(buffer, format="PNG")
+    qr_base64 = base64.b64encode(buffer.getvalue()).decode()
+
+    return f'<img src="data:image/png;base64,{qr_base64}" alt="QR Code">'
+
+@app.route("/submit_place", methods=["POST"])
+def submit_place():
+    data = request.json
+    name = data.get("name")
+    building = data.get("building")
+    latitude = data.get("latitude")
+    longitude = data.get("longitude")
+    address = data.get("address", "Unknown Address")
+
+    if not name or not building or not latitude or not longitude:
+        return jsonify({"success": False, "message": "Missing required fields"}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO places (name, building, latitude, longitude, address) VALUES (?, ?, ?, ?, ?)",
+        (name, building, latitude, longitude, address)
+    )
+    conn.commit()
+    conn.close()
+
+    return jsonify({"success": True, "message": "Place added successfully"})
+
+# Route: Fetch all places
+@app.route("/api/places", methods=["GET"])
+def get_places():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, building FROM places")  # Only select name & building
+    places = cursor.fetchall()
+    conn.close()
+
+    places_list = [
+        {
+            "name": place["name"],
+            "building": place["building"]
+        }
+        for place in places
+    ]
+    return jsonify(places_list)
+
 if __name__ == "__main__":
     app.run(debug=True)
-
