@@ -118,16 +118,18 @@ document.addEventListener("DOMContentLoaded", function () {
                     let lon = position.coords.longitude;
 
                     // Store location in hidden field for submission
-                    studentLocation.value = `${lat},${lon}`;
+                    //studentLocation.value = `${lat},${lon}`;
 
+                    let capturedStudentLocation = `${lat},${lon}`;
                     locationCaptured = true;
 
                     // Submit form only after location is retrieved
-                    submitStudentCheckin();
+                    submitStudentCheckin(capturedStudentLocation);
                 },
                 function (error) {
                     console.error("Geolocation error:", error);
-                    alert("Location access denied or unavailable.");
+                    //alert("Location access denied or unavailable.");
+                    alert(error.code, error.message);
                 },
                 { enableHighAccuracy: true }
             );
@@ -137,16 +139,20 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     btnAllowLocation.addEventListener("click", getLocationAndSubmit);
+    test.addEventListener("click", getLocationAndSubmit);
 
     ///// Frame 3 - Submit Form & Enable Finish Button /////
-    function submitStudentCheckin() {
+    const url = window.location.pathname;
+    
+    function submitStudentCheckin(capturedStudentLocation) {
         let formData = {
             firstName: document.getElementById("firstName").value,
             lastName: document.getElementById("lastName").value,
             email: document.getElementById("studentEmail").value,
             classForExtraCredit: document.getElementById("className").value,
             professorForExtraCredit: document.getElementById("professorName").value,
-            studentLocation: studentLocation.value
+            scannedEventID: url.split('/')[2],
+            studentLocation: capturedStudentLocation,
         };
 
         fetch('/submit_student_checkin', {
