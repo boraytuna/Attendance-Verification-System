@@ -139,7 +139,6 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     btnAllowLocation.addEventListener("click", getLocationAndSubmit);
-    test.addEventListener("click", getLocationAndSubmit);
 
     ///// Frame 3 - Submit Form & Enable Finish Button /////
     const url = window.location.pathname;
