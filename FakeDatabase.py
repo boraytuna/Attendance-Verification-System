@@ -8,7 +8,8 @@ cursor = conn.cursor()
 cursor.execute('''
 CREATE TABLE IF NOT EXISTS Professor (
     professor_id INTEGER PRIMARY KEY,
-    professor_name TEXT NOT NULL
+    professor_name TEXT NOT NULL,
+    professor_email TEXT NOT NULL
 )
 ''')
 
@@ -22,13 +23,13 @@ CREATE TABLE IF NOT EXISTS Courses (
 
 # Insert normal professor values
 professors = [
-    (1, 'Dr. John Smith'),
-    (2, 'Dr. Emily Johnson'),
-    (3, 'Dr. Michael Brown'),
-    (4, 'Dr. Sarah Lee'),
-    (5, 'Dr. David Wilson')
+    (1, 'Dr. John Smith', 'stangljx22@bonaventure.edu'),
+    (2, 'Dr. Emily Johnson', 'stangljx22@bonaventure.edu'),
+    (3, 'Dr. Michael Brown', 'stangljx22@bonaventure.edu'),
+    (4, 'Dr. Sarah Lee', 'stangljx22@bonaventure.edu'),
+    (5, 'Dr. David Wilson', 'stangljx22@bonaventure.edu')
 ]
-cursor.executemany('INSERT INTO Professor (professor_id, professor_name) VALUES (?, ?)', professors)
+cursor.executemany('INSERT INTO Professor (professor_id, professor_name, professor_email) VALUES (?, ?, ?)', professors)
 
 # Insert normal course values
 courses = [

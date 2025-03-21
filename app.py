@@ -5,6 +5,10 @@ import os
 import segno
 import requests
 import random
+from datetime import datetime
+import schedule
+import time
+from threading import Thread
 
 app = Flask(__name__)
 
@@ -32,6 +36,13 @@ GOOGLE_API_KEY = "AIzaSyAzf_3rNo5yi24L3Mu35o5VHaw1PwVmeTs"  # Replace with your 
 # Function to connect to SQLite
 def get_db_connection():
     conn = sqlite3.connect(DATABASE_NAME)
+    conn.row_factory = sqlite3.Row  # Enables dictionary-style access
+    conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
+    return conn
+
+# TEMPORARY - function to connect to fake DB
+def get_fakedb_connection():
+    conn = sqlite3.connect("fake.db")
     conn.row_factory = sqlite3.Row  # Enables dictionary-style access
     conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
     return conn
@@ -248,6 +259,98 @@ def submit_student_checkin():
     conn.close()
 
     return jsonify({'status': 'success'})
+
+# **Functions for Generating and Sending Emails to Professors Post-Event**
+def construct_email_records():
+    """
+    Collect a list of professors and their students' attendance records
+    to be used to generate emails.
+
+    Returns:
+    emails - dictionary with professor names as keys and a list of student
+    details as values
+    """
+    conn = get_db_connection()
+
+    #get student information and their attendance status records
+    results = conn.cursor().execute('''
+        SELECT sc.firstName, sc.lastName, sc.classForExtraCredit, sc.professorForExtraCredit, atd.attendanceStatus
+        FROM student_checkins sc
+        JOIN attendance_status atd ON sc.checkinID = atd.checkinID
+    ''').fetchall()
+
+    #get unique professor names to use as keys in the dictionary
+    professors = conn.cursor().execute('''
+        SELECT DISTINCT sc.professorForExtraCredit
+        FROM student_checkins sc
+        JOIN attendance_status atd ON sc.checkinID = atd.checkinID
+    ''').fetchall()
+    conn.close()
+
+    #create a dictionary with professor names as keys
+    #and a list of student details as values
+    emails = {}
+    for professor in professors:
+        records = []
+        professor_name = professor[0]
+        emails[professor_name] = records
+
+        for result in results:
+            if result[3] == professor_name:
+                records.append(f'{result[0]} {result[1]} - {result[2]} - {result[4]}')
+
+    return emails
+
+def send_professor_emails():
+    """
+    Send emails to professors with a summary of student attendance records.
+    """
+    emails = construct_email_records()
+    professors = (emails.keys())
+
+    conn_fakedb = get_fakedb_connection()
+    for professor in professors:
+        #get the professors' email from fake db
+        professor_email = conn_fakedb.cursor().execute('''
+            SELECT professor_email FROM Professor WHERE professor_name = ?
+        ''', (professor,)).fetchone()
+
+        #format student attendance records as an html body, use plaintext as
+        #backup if html within email is unsupported
+        plaintext_msg = 'Hello ' + professor + '! The following students recently attended an event for course credit:\n' + '\n'.join(emails[professor])
+        html_msg = f'''
+        <html>
+            <body>
+                <p>Hello {professor},</p>
+                <p>The following students recently attended an event for course credit:</p>
+                <table border="1" style="border-collapse: collapse; width: 100%;">
+                    <tr>
+                        <th style="padding: 8px; text-align: left; border: 1px solid black;">Name</th>
+                        <th style="padding: 8px; text-align: left; border: 1px solid black;">Class</th>
+                        <th style="padding: 8px; text-align: left; border: 1px solid black;">Attendance Status</th>
+                    </tr>
+                    {''.join(f"<tr><td style='padding: 8px; border: 1px solid black;'>{result.split(' - ')[0]}</td>"
+                            f"<td style='padding: 8px; border: 1px solid black;'>{result.split(' - ')[1]}</td>"
+                            f"<td style='padding: 8px; border: 1px solid black;'>{result.split(' - ')[2]}</td></tr>"
+                            for result in emails[professor])}
+                </table>
+            </body>
+        </html>
+        '''
+        msg = Message (
+            subject='Student Attendance Notification',
+            recipients=[professor_email[0]],
+            body=plaintext_msg,
+            html=html_msg
+        )
+        mail.send(msg)
+
+    conn_fakedb.close()
+
+#TODO - this occurs immediately upon app startup, need to change
+#to a scheduled duration or decide on something else?
+with app.app_context():
+    send_professor_emails()
 
 # Route: Handle Event Creation
 @app.route("/submit_event", methods=["POST"])
