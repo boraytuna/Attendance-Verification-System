@@ -26,7 +26,7 @@
 - #### Implications:
     - Easier for developers- all student-interface front-end code within one file.
 
-## [2025-03-23] - Change Summary
+## [2025-03-17] - Change Summary
 ### Switched from Python to JavaScript-based geolocation
 - #### Description:
   - Implemented real-time student location tracking in the browser via JavaScript APIs instead of using Python-based libraries.
