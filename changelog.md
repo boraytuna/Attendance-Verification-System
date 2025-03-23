@@ -25,3 +25,12 @@
     - Wanted cleaner/better organization on the back-end.
 - #### Implications:
     - Easier for developers- all student-interface front-end code within one file.
+
+## [2025-03-23] - Change Summary
+### Switched from Python to JavaScript-based geolocation
+- #### Description:
+  - Implemented real-time student location tracking in the browser via JavaScript APIs instead of using Python-based libraries.
+- #### Motivation:
+  - Python libraries did not provide sufficient accuracy or real-time tracking when the phone was locked. JavaScript geolocation is more reliable and familiar to users.
+- #### Implications:
+  - Requires careful handling of browser permissions and background states for continuous tracking. Improves precision and user experience for verifying attendance in real time.
