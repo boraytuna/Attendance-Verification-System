@@ -114,7 +114,12 @@ create_tables()
 @app.route("/")
 @app.route("/dashboard")
 def dashboard():
-    return render_template("dashboard.html")
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM events")
+    events = cursor.fetchall()
+    conn.close()
+    return render_template("dashboard.html", events=events)
 
 # Route: Events Page
 @app.route("/events", methods=["GET"])
