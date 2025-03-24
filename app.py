@@ -398,13 +398,29 @@ def submit_event():
 def get_events():
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute(
-        "SELECT eventID, eventName, eventDate, startTime, stopTime, latitude, longitude, eventAddress FROM events")
+    cursor.execute("SELECT eventID, eventName, eventDate, startTime, stopTime, latitude, longitude, eventAddress FROM events")
     events = cursor.fetchall()
     conn.close()
+    formatted_events = []
+    for event in events:
+        # Convert to dictionary (assuming events is a list of tuples)
+        event_dict = dict(event)
 
-    events_list = [dict(event) for event in events]
-    return jsonify(events_list)
+        # Combine date and time for FullCalendar's required format
+        start_datetime = f"{event_dict['eventDate']}T{event_dict['startTime']}"
+        end_datetime = f"{event_dict['eventDate']}T{event_dict['stopTime']}" if event_dict["stopTime"] else None
+
+        formatted_events.append({
+            "id": event_dict["eventID"],
+            "title": event_dict["eventName"],
+            "start": start_datetime,
+            "end": end_datetime,
+            "location": event_dict["eventAddress"],
+            "latitude": event_dict["latitude"],
+            "longitude": event_dict["longitude"]
+        })
+
+    return jsonify(formatted_events)
 
 if __name__ == "__main__":
     app.run(debug=True)
