@@ -92,6 +92,18 @@ def create_tables():
         )
     ''')
 
+    # Create Places Table
+    cursor.execute('''
+            CREATE TABLE IF NOT EXISTS places (
+                placeID INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                latitude REAL NOT NULL,
+                longitude REAL NOT NULL,
+                building TEXT NOT NULL,
+                address TEXT NULL
+            )
+    ''')
+
     conn.commit()
     conn.close()
 
@@ -127,7 +139,12 @@ def find_student():
 # Route: Places Page
 @app.route("/places")
 def places():
-    return render_template("places.html")
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM places")
+    places = cursor.fetchall()
+    conn.close()
+    return render_template("places.html", places=places)
 
 # Function to generate (or retrieve) QR code
 def get_or_create_qr_code(event_id):
@@ -421,6 +438,47 @@ def get_events():
         })
 
     return jsonify(formatted_events)
+
+@app.route("/submit_place", methods=["POST"])
+def submit_place():
+    data = request.json
+    name = data.get("name")
+    building = data.get("building")
+    latitude = data.get("latitude")
+    longitude = data.get("longitude")
+    address = data.get("address", "Unknown Address")
+
+    if not name or not building or not latitude or not longitude:
+        return jsonify({"success": False, "message": "Missing required fields"}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO places (name, building, latitude, longitude, address) VALUES (?, ?, ?, ?, ?)",
+        (name, building, latitude, longitude, address)
+    )
+    conn.commit()
+    conn.close()
+
+    return jsonify({"success": True, "message": "Place added successfully"})
+
+# Route: Fetch all places
+@app.route("/api/places", methods=["GET"])
+def get_places():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, building FROM places")  # Only select name & building
+    places = cursor.fetchall()
+    conn.close()
+
+    places_list = [
+        {
+            "name": place["name"],
+            "building": place["building"]
+        }
+        for place in places
+    ]
+    return jsonify(places_list)
 
 if __name__ == "__main__":
     app.run(debug=True)
