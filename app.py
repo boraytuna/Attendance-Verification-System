@@ -175,7 +175,6 @@ def serve_qr_code(event_id):
 
 # **Route: Student Interface**
 @app.route("/student_checkin/<int:event_id>")
-#@app.route("/student_checkin/<int:event_id>/<int:page>")
 def student_interface(event_id):
     """Serve the student interface pages for a specific event.
     Pass the eventID and eventName to the HTML template."""
@@ -372,6 +371,7 @@ def send_professor_emails():
 #TODO - this occurs immediately upon app startup, need to change
 #to a scheduled duration or decide on something else?
 with app.app_context():
+    pass
     send_professor_emails()
 
 # Route: Handle Event Creation
@@ -381,36 +381,26 @@ def submit_event():
     event_date = request.form["event_date"]
     start_time = request.form["start_time"]
     stop_time = request.form["stop_time"]
-    event_location = request.form["event_location"]  # Lat,Lng format
-
-    if not event_location:
-        return jsonify({"message": "Please select a location"}), 400
-
+    event_location = request.form["event_location"]
+    event_address = request.form.get("event_address", "Unknown Location")
+    
     try:
         lat, lng = map(float, event_location.split(","))
     except ValueError:
         return jsonify({"message": "Invalid location format"}), 400
 
-    # Reverse Geocode using Google Maps API
-    address = "Unknown Location"
-    geocode_url = f"https://maps.googleapis.com/maps/api/geocode/json?latlng={lat},{lng}&key={GOOGLE_API_KEY}"
-    response = requests.get(geocode_url).json()
-
-    if response["status"] == "OK" and len(response["results"]) > 0:
-        address = response["results"][0]["formatted_address"]
-
+    # Use the address provided by the frontend
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO events (eventName, eventDate, startTime, stopTime, latitude, longitude, eventAddress)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', (event_name, event_date, start_time, stop_time, lat, lng, address))
+    ''', (event_name, event_date, start_time, stop_time, lat, lng, event_address))
 
-    event_id = cursor.lastrowid  # Get the newly created event ID
+    event_id = cursor.lastrowid
     conn.commit()
     conn.close()
 
-    # Generate QR Code for this event
     get_or_create_qr_code(event_id)
 
     return redirect("/events")
@@ -472,14 +462,16 @@ def submit_place():
 def get_places():
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT name, building FROM places")  # Only select name & building
+    cursor.execute("SELECT * FROM places")
     places = cursor.fetchall()
     conn.close()
 
     places_list = [
         {
             "name": place["name"],
-            "building": place["building"]
+            "building": place["building"],
+            "latitude": place["latitude"],
+            "longitude": place["longitude"]
         }
         for place in places
     ]

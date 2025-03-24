@@ -34,6 +34,7 @@
             var selectedValue = document.getElementById("saved_locations").value;
             var locationError = document.getElementById("location_error");
 
+            //if user picks "Show Map (Pick a New Location)", show the map in the Events page
             if (selectedValue === "show_map") {
                 document.getElementById("map-container").style.display = "block";
 
@@ -63,6 +64,7 @@
                         });
                     });
                 }
+            //otherwise, hide the map and get the lat and long of the selected location
             } else if (selectedValue) {
                 document.getElementById("map-container").style.display = "none";
                 var [lat, lng] = selectedValue.split(",").map(Number);
