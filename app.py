@@ -86,11 +86,15 @@ def create_tables():
 # Ensure database tables exist
 create_tables()
 
-# Route: Dashboard
 @app.route("/")
 @app.route("/dashboard")
 def dashboard():
-    return render_template("dashboard.html")
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM events")
+    events = cursor.fetchall()
+    conn.close()
+    return render_template("dashboard.html", events=events)
 
 # Route: Events Page
 @app.route("/events", methods=["GET"])
@@ -217,36 +221,26 @@ def submit_event():
     event_date = request.form["event_date"]
     start_time = request.form["start_time"]
     stop_time = request.form["stop_time"]
-    event_location = request.form["event_location"]  # Lat,Lng format
-
-    if not event_location:
-        return jsonify({"message": "Please select a location"}), 400
+    event_location = request.form["event_location"]
+    event_address = request.form.get("event_address", "Unknown Location")
 
     try:
         lat, lng = map(float, event_location.split(","))
     except ValueError:
         return jsonify({"message": "Invalid location format"}), 400
 
-    # Reverse Geocode using Google Maps API
-    address = "Unknown Location"
-    geocode_url = f"https://maps.googleapis.com/maps/api/geocode/json?latlng={lat},{lng}&key={GOOGLE_API_KEY}"
-    response = requests.get(geocode_url).json()
-
-    if response["status"] == "OK" and len(response["results"]) > 0:
-        address = response["results"][0]["formatted_address"]
-
+    # Use the address provided by the frontend
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO events (eventName, eventDate, startTime, stopTime, latitude, longitude, eventAddress)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', (event_name, event_date, start_time, stop_time, lat, lng, address))
+    ''', (event_name, event_date, start_time, stop_time, lat, lng, event_address))
 
-    event_id = cursor.lastrowid  # Get the newly created event ID
+    event_id = cursor.lastrowid
     conn.commit()
     conn.close()
 
-    # Generate QR Code for this event
     get_or_create_qr_code(event_id)
 
     return redirect("/events")

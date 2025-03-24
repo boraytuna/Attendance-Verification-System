@@ -8,32 +8,119 @@
 
 <script>
     let map;
-    let marker = null;
+    let marker;
+    let geocoder;
+    const defaultCenter = { lat: 42.0792, lng: -78.4823 };
 
     function initMap() {
-        var defaultCenter = { lat: 42.0792, lng: -78.4823 };
+        geocoder = new google.maps.Geocoder();
 
-        map = new google.maps.Map(document.getElementById('map'), {
-            zoom: 15,
-            center: defaultCenter
-        });
+        // Fetch stored locations from /api/places and populate dropdown
+        fetch("/api/places")
+            .then(response => response.json())
+            .then(places => {
+                var select = document.getElementById("saved_locations");
+                places.forEach(place => {
+                    var option = document.createElement("option");
+                    option.value = `${place.latitude},${place.longitude}`;
+                    option.textContent = `${place.name} (${place.building})`;
+                    select.appendChild(option);
+                });
+            })
+            .catch(error => console.error("Error fetching places:", error));
 
-        map.addListener('click', function (event) {
-            var lat = event.latLng.lat();
-            var lng = event.latLng.lng();
+        // Handle location selection
+        window.handleLocationSelection = function () {
+            var selectedValue = document.getElementById("saved_locations").value;
+            var locationError = document.getElementById("location_error");
 
-            if (marker) {
-                marker.setPosition({ lat: lat, lng: lng });
-            } else {
-                marker = new google.maps.Marker({
-                    position: { lat: lat, lng: lng },
-                    map: map
+            if (selectedValue === "show_map") {
+                document.getElementById("map-container").style.display = "block";
+
+                if (!map) {
+                    map = new google.maps.Map(document.getElementById("map"), {
+                        zoom: 15,
+                        center: defaultCenter
+                    });
+
+                    marker = new google.maps.Marker({
+                        position: defaultCenter,
+                        map: map,
+                        draggable: true
+                    });
+
+                    marker.addListener('dragend', function (event) {
+                        var lat = event.latLng.lat();
+                        var lng = event.latLng.lng();
+                        document.getElementById('event_location').value = `${lat},${lng}`;
+
+                        geocoder.geocode({ location: { lat: lat, lng: lng } }, function (results, status) {
+                            if (status === 'OK' && results[0]) {
+                                document.getElementById('event_address').value = results[0].formatted_address;
+                            } else {
+                                console.error("Geocode error: " + status);
+                            }
+                        });
+                    });
+                }
+            } else if (selectedValue) {
+                document.getElementById("map-container").style.display = "none";
+                var [lat, lng] = selectedValue.split(",").map(Number);
+                document.getElementById("event_location").value = `${lat},${lng}`;
+                geocoder.geocode({ location: { lat: lat, lng: lng } }, function (results, status) {
+                    if (status === 'OK' && results[0]) {
+                        document.getElementById('event_address').value = results[0].formatted_address;
+                    } else {
+                        console.error("Geocode error: " + status);
+                        document.getElementById("event_address").value = document.getElementById("saved_locations").options[
+                            document.getElementById("saved_locations").selectedIndex
+                        ].text;
+                    }
                 });
             }
 
-            // Update hidden input fields
-            document.getElementById('event_location').value = `${lat},${lng}`;
-        });
+            if (selectedValue || document.getElementById("event_location").value) {
+                locationError.style.display = "none";
+            }
+        };
+
+        // Ensure at least one location is selected before submission
+        window.validateLocation = function (event) {
+            var location = document.getElementById("event_location").value;
+            var selectedValue = document.getElementById("saved_locations").value;
+            var locationError = document.getElementById("location_error");
+
+            if (!location && !selectedValue) {
+                event.preventDefault();
+                locationError.style.display = "block";
+                return false;
+            }
+
+            // Delay form submission until geocoder returns
+            if (selectedValue && selectedValue !== "show_map") {
+                event.preventDefault(); // pause form
+
+                var [lat, lng] = selectedValue.split(",").map(Number);
+
+                geocoder.geocode({ location: { lat: lat, lng: lng } }, function (results, status) {
+                    if (status === 'OK' && results[0]) {
+                        document.getElementById('event_address').value = results[0].formatted_address;
+                    } else {
+                        document.getElementById("event_address").value = document.getElementById("saved_locations").options[
+                            document.getElementById("saved_locations").selectedIndex
+                        ].text;
+                    }
+
+                    // Only submit AFTER address is set
+                    document.querySelector("form").submit();
+                });
+
+                return false; // stop for now
+            }
+
+            return true;
+        };
+
     }
 </script>
 
@@ -66,7 +153,8 @@
     }
 
     input,
-    button {
+    button,
+    select {
         margin-top: 5px;
         padding: 10px;
         width: 100%;
@@ -144,51 +232,24 @@
         <label for="stop_time">End Time:</label>
         <input type="time" id="stop_time" name="stop_time" required>
 
-        <!-- Hidden field for event location -->
-        <input type="hidden" id="event_location" name="event_location" required>
+        <label for="saved_locations">Choose a Location:</label>
+        <select id="saved_locations" onchange="handleLocationSelection()">
+            <option value="">-- Select a saved location --</option>
+            <option value="show_map">🔍 Show Map (Pick a New Location)</option>
+        </select>
 
-        <h3>🗺️ Select Event Location:</h3>
-        <div id="map"></div>
+        <input type="hidden" id="event_location" name="event_location">
+        <input type="hidden" id="event_address" name="event_address">
 
-        <button type="submit">Create Event</button>
+        <div id="map-container" style="display: none;">
+            <h3>🗺️ Select a New Location on the Map:</h3>
+            <div id="map"></div>
+        </div>
+
+        <p id="location_error" style="color: red; display: none;">⚠️ Please select a location before submitting.</p>
+
+        <button type="submit" onclick="validateLocation(event)">Create Event</button>
     </form>
-
-    <!-- Event List Display -->
-    <h2>📅 Scheduled Events</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Event Name</th>
-                <th>Date</th>
-                <th>Start Time</th>
-                <th>Location</th>
-                <th>QR Code</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for event in events %}
-            <tr>
-                <td>{{ event['eventName'] }}</td>
-                <td>{{ event['eventDate'] }}</td>
-                <td>{{ event['startTime'] }}</td>
-                <td>
-                    {% if event['eventAddress'] %}
-                    {{ event['eventAddress'] }}
-                    {% else %}
-                    {{ event['latitude'] }}, {{ event['longitude'] }}
-                    {% endif %}
-                </td>
-                <td>
-                    <div class="qr-buttons">
-                        <a href="/qr_code/{{ event['eventID'] }}">
-                            <button>View QR Code</button>
-                        </a>
-                    </div>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
 </body>
 
 {% endblock %}
