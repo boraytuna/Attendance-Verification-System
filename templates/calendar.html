@@ -1,6 +1,89 @@
-<!-- calendar.html -->
 {% extends 'base.html' %}
 
 {% block content %}
     <h1>Calendar</h1>
+
+    <div class="calendar-container">
+        <div class="calendar-header">
+            <button id="prevMonth">&lt;</button>
+            <h2 id="monthYear"></h2>
+            <button id="nextMonth">&gt;</button>
+        </div>
+        <div class="calendar-grid" id="calendar"></div>
+    </div>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/calendar.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const calendarEl = document.getElementById("calendar");
+            const monthYearEl = document.getElementById("monthYear");
+            const prevMonthBtn = document.getElementById("prevMonth");
+            const nextMonthBtn = document.getElementById("nextMonth");
+
+            let currentDate = new Date();
+
+            function generateCalendar(date) {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+
+    monthYearEl.textContent = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(date);
+    calendarEl.innerHTML = ""; // Clear existing content
+
+    const firstDay = new Date(year, month, 1).getDay();
+    const lastDate = new Date(year, month + 1, 0).getDate();
+
+    calendarEl.classList.add("calendar-grid");
+
+    for (let i = 0; i < firstDay; i++) {
+        const emptyCell = document.createElement("div");
+        emptyCell.classList.add("calendar-cell", "empty");
+        calendarEl.appendChild(emptyCell);
+    }
+
+    for (let day = 1; day <= lastDate; day++) {
+        const cell = document.createElement("div");
+        cell.classList.add("calendar-cell");
+        cell.dataset.date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        cell.innerHTML = `<strong>${day}</strong><div class="event-list"></div>`;
+        calendarEl.appendChild(cell);
+    }
+
+    loadEvents();
+}
+
+
+            function loadEvents() {
+                axios.get("/api/events")
+                    .then(response => {
+                        console.log("Events loaded:", response.data);
+                        const events = response.data;
+                        events.forEach(event => {
+                            const eventDate = event.start.split("T")[0];
+                            const cell = document.querySelector(`[data-date='${eventDate}']`);
+                            if (cell) {
+                                const eventDiv = document.createElement("div");
+                                eventDiv.classList.add("event");
+                                eventDiv.textContent = event.title;
+                                cell.querySelector(".event-list").appendChild(eventDiv);
+                            }
+                        });
+                    })
+                    .catch(error => console.error("Error loading events:", error));
+            }
+
+            prevMonthBtn.addEventListener("click", function () {
+                currentDate.setMonth(currentDate.getMonth() - 1);
+                generateCalendar(currentDate);
+            });
+
+            nextMonthBtn.addEventListener("click", function () {
+                currentDate.setMonth(currentDate.getMonth() + 1);
+                generateCalendar(currentDate);
+            });
+
+            generateCalendar(currentDate);
+        });
+    </script>
 {% endblock %}
