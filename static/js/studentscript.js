@@ -175,7 +175,7 @@ document.addEventListener("DOMContentLoaded", function () {
     ///// Frame 3 - Finish Button Loads Frame 4 /////
     btnFinish.addEventListener("click", function () {
         if (!btnFinish.disabled) {
-            showFrame(4);
+            showFrame(3);
         }
     });
 });
