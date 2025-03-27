@@ -11,12 +11,9 @@ The **Attendance Verification System** is a mobile-friendly web interface design
 - 🧠 Intelligent validation logic (e.g., time, location-based)
 - 🗂️ Real-time database integration
 - 📊 Admin dashboard for attendance monitoring
-- 📍 (Optional) Geolocation tagging for enhanced verification
 
 ## 🧱 Tech Stack
 
 - **Frontend:** HTML, CSS, JavaScript (with responsive design for mobile)
 - **Backend:** Node.js /  Python / Flask 
 - **Database:** SQLite
-- **Authentication:** Token-based (JWT) or OAuth (configurable)
-- **Deployment:** Mobile-first, with support for cloud hosting (e.g., Vercel, Heroku)
