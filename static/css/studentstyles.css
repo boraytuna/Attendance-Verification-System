@@ -1,0 +1,120 @@
+html, body {
+    width: 100vw;
+    height: 100vh;
+    background-color: #FAFAFA;
+    color: #212121;
+    font-family: "Inter", sans-serif;
+    font-optical-sizing: auto;
+    font-weight: 400;
+    font-style: normal;
+    font-size: 1rem;
+    line-height: 1.2rem;
+    display: block;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+h1 {
+    font-family: "Kadwa", serif;
+    font-weight: 700;
+    font-style: normal;
+    font-size: 2.5rem;
+    line-height: 2.7rem;
+}
+
+/* content refers to all elements in each frame
+besides heading (Student Attendance Form) and
+bottom button (that navigates between frames) */
+
+.content {
+    width: 80vw;
+    height: 80vh;
+    text-align: center;
+    align-items: center;
+    justify-content: center;
+    margin: auto;
+}
+.content form {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 2rem;
+}
+.content form label {
+    margin-top: 2rem;
+    margin-bottom: 0.5rem;
+    text-align: left;
+}
+.content form input {
+    height: 125%;
+    font-size: 1rem;
+    line-height: 1.2rem;
+    height: 3rem;
+}
+
+/* container for form input and icon */
+.inputContainer {
+    width: 100%;
+    height: 3rem;
+    position: relative;
+}
+.inputContainer input {
+    height: 125%;
+    width: 100%;
+    padding-left: 2.5rem;
+    box-sizing: border-box;
+}
+.inputContainer .fa-regular {
+    width: 1.5rem;
+    height: 1.5rem;
+    position: absolute;
+    top: 25%;
+    left: 0.625rem;
+}
+
+/* container for form checkbox and label */
+.content .checkboxContainer {
+    margin-top: 0.625rem;
+}
+.content .checkboxContainer #userAgreement {
+    width: 1.125rem;
+    line-height: 100%;
+    vertical-align: middle;
+    margin-right: 0.625rem;
+}
+.content .checkboxContainer #privacyPolicy {
+    width: 1.125rem;
+    vertical-align: middle;
+    margin-right: 0.625rem;
+}
+.content .checkboxContainer label {
+    margin: 0;
+    padding: 0;
+    vertical-align: middle;
+}
+
+.content img {
+    padding-top: 40px;
+    width: 100px;
+    height: 100px;
+}
+
+.content #btnAllowLocation {
+    width: 100%;
+    height: 3rem;
+}
+
+button {
+    width: 100%;
+    height: 3rem;
+    margin-bottom: 1.5rem;
+    font-weight: 600;
+    font-size: 1.1rem;
+    font-weight: bold;
+    line-height: 1.3rem;
+    background-color: rgb(219, 232, 255);
+    border-radius: .25rem;
+    border: 1px solid #2F88FF;
+}

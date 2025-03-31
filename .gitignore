@@ -1,2 +1,31 @@
+# Needs to be actual db
 attendance.db
+
+# Needs to be actual db
 qr_codes
+
+# macOS system file
+.DS_Store
+
+# Python bytecode cache
+__pycache__/
+*.pyc
+
+# JetBrains / PyCharm / IntelliJ
+.idea/
+*.iml
+
+# VS Code
+.vscode/
+
+# Default ignored files
+/shelf/
+/workspace.xml
+
+# Editor-based HTTP Client requests
+/httpRequests/
+
+# Datasource local storage ignored files
+/dataSources/
+/dataSources.local.xml
+

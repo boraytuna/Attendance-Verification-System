@@ -1,0 +1,184 @@
+{#<!DOCTYPE html>#}
+{#<html>#}
+{#<head>#}
+{#    <title>Student Check-In</title>#}
+{#    <meta name="viewport" content="width=device-width, initial-scale=1.0">#}
+{#    <link rel="preconnect" href="https://fonts.googleapis.com">#}
+{#    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>#}
+{#    <link href="https://fonts.googleapis.com/css2?family=Kadwa:wght@400;700&display=swap" rel="stylesheet">#}
+{#    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">#}
+{#    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">#}
+{#    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/studentstyles.css') }}">#}
+{#</head>#}
+{#<script src="{{ url_for('static', filename='js/studentscript.js') }}"></script>#}
+{#<body>#}
+{#    <!-- Frame 1 -->#}
+{#    <section id="frame1" style="display: block;">#}
+{#        <div class="content">#}
+{#            <h1>Student Attendance Form</h1>#}
+{#            <h2>{{ eventName | default("Event Not Found") }}</h2>#}
+{#            <form>#}
+{#                <label for="firstName">Enter your first name</label>#}
+{#                <div class="inputContainer">#}
+{#                    <i class="fa-regular fa-user"></i>#}
+{#                    <input type="text" id="firstName" name="firstName" placeholder="First Name" required>#}
+{#                </div>#}
+{#                <label for="lastName">Enter your last name</label>#}
+{#                <div class="inputContainer">#}
+{#                    <i class="fa-regular fa-user"></i>#}
+{#                    <input type="text" id="lastName" name="lastName" placeholder="Last Name" required>#}
+{#                </div>#}
+{#                <label for="studentEmail">Enter your student email</label>#}
+{#                <div class="inputContainer">#}
+{#                    <i class="fa-regular fa-envelope"></i>#}
+{#                    <input type="text" id="studentEmail" name="studentEmail" placeholder="Student Email" required>#}
+{#                </div>#}
+{#            </form>#}
+{#            <button id="btnSubmitFrame1">Verify Email</button>#}
+{#        </div>#}
+{#    </section>#}
+{##}
+{#    <!-- Frame 2 -->#}
+{#    <section id="frame2" style="display: none;">#}
+{#        <div class="content">#}
+{#            <h1>Student Attendance Form</h1>#}
+{#            <form>#}
+{#                <label for="securityCode">Enter security code</label>#}
+{#                <input type="text" id="securityCode" name="securityCode" placeholder="Security Code" minlength="6" maxlength="6" required>#}
+{#            </form>#}
+{#            <button id="btnSubmitFrame2">Verify Code</button>#}
+{#        </div>#}
+{#    </section>#}
+{##}
+{#    <!-- Frame 3 -->#}
+{#    <section id="frame3" style="display: none;">#}
+{#        <div class="content">#}
+{#            <h1>Student Attendance Form</h1>#}
+{#            <form>#}
+{#                <label for="className">Enter class name</label>#}
+{#                <input type="text" id="className" name="className" placeholder="Enter class name" list="courseSuggestions">#}
+{#                <datalist id="courseSuggestions"></datalist>#}
+{#                <label for="professorName">Enter professor name</label>#}
+{#                <input type="text" id="professorName" name="professorName" placeholder="Enter professor name" list="professorSuggestions">#}
+{#                <datalist id="professorSuggestions"></datalist>#}
+{#                <div class="checkboxContainer">#}
+{#                    <input type="checkbox" id="userAgreement" name="userAgreement" required>#}
+{#                    <label for="userAgreement">User Agreement</label>#}
+{#                </div>#}
+{#                <div class="checkboxContainer">#}
+{#                    <input type="checkbox" id="privacyPolicy" name="privacyPolicy" required>#}
+{#                    <label for="privacyPolicy">Privacy Policy</label>#}
+{#                </div>#}
+{#            </form>#}
+{#            <div style="margin-bottom: 1rem;">#}
+{#                <p>We need to track your location in order to verify attendance during the event.</p>#}
+{#                <button id="btnAllowLocation">Allow Location Access</button>#}
+{#            </div>#}
+{#            <button id="btnSubmitFrame3">Finish</button>#}
+{#        </div>#}
+{#    </section>#}
+{##}
+{#    <!-- Frame 4 -->#}
+{#    <section id="frame4" style="display: none;">#}
+{#        <div class="content">#}
+{#            <h1>Student Attendance Form</h1>#}
+{#            <img src="{{ url_for('static', filename='images/student-form-complete.png') }}" alt="Student form complete image">#}
+{#            <p>You're all set!<br>Keep this tab open to ensure proper location-tracking throughout the event.</p>#}
+{#        </div>#}
+{#    </section>#}
+{#</body>#}
+{#</html>#}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Student Check-In</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Kadwa:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/studentstyles.css') }}">
+</head>
+<script src="{{ url_for('static', filename='js/studentscript.js') }}"></script>
+<body>
+    <!-- Frame 1 -->
+    <section id="frame1" style="display: block;">
+        <div class="content">
+            <h1>Student Attendance Form</h1>
+            <h2>{{ eventName | default("Event Not Found") }}</h2>
+            <form>
+                <label for="firstName">Enter your first name</label>
+                <div class="inputContainer">
+                    <i class="fa-regular fa-user"></i>
+                    <input type="text" id="firstName" name="firstName" placeholder="First Name" required>
+                </div>
+                <label for="lastName">Enter your last name</label>
+                <div class="inputContainer">
+                    <i class="fa-regular fa-user"></i>
+                    <input type="text" id="lastName" name="lastName" placeholder="Last Name" required>
+                </div>
+                <label for="studentEmail">Enter your student email</label>
+                <div class="inputContainer">
+                    <i class="fa-regular fa-envelope"></i>
+                    <input type="text" id="studentEmail" name="studentEmail" placeholder="Student Email" required>
+                </div>
+            </form>
+            <button id="btnSubmitFrame1">Verify Email</button>
+        </div>
+    </section>
+
+    <!-- Frame 2 -->
+    <section id="frame2" style="display: none;">
+        <div class="content">
+            <h1>Student Attendance Form</h1>
+            <form>
+                <label for="securityCode">Enter security code</label>
+                <input type="text" id="securityCode" name="securityCode" placeholder="Security Code" minlength="6" maxlength="6" required>
+            </form>
+            <button id="btnSubmitFrame2">Verify Code</button>
+        </div>
+    </section>
+
+    <!-- Frame 3 -->
+    <section id="frame3" style="display: none;">
+        <div class="content">
+            <h1>Student Attendance Form</h1>
+            <form id="studentCheckinForm">
+                <label for="className">Enter class name</label>
+                <input type="text" id="className" name="className" placeholder="Enter class name" list="courseSuggestions">
+                <datalist id="courseSuggestions"></datalist>
+
+                <label for="professorName">Enter professor name</label>
+                <input type="text" id="professorName" name="professorName" placeholder="Enter professor name" list="professorSuggestions">
+                <datalist id="professorSuggestions"></datalist>
+
+                <div class="checkboxContainer">
+                    <input type="checkbox" id="userAgreement" name="userAgreement">
+                    <label for="userAgreement">User Agreement</label>
+                </div>
+
+                <div class="checkboxContainer">
+                    <input type="checkbox" id="privacyPolicy" name="privacyPolicy">
+                    <label for="privacyPolicy">Privacy Policy</label>
+                </div>
+
+                <!-- Location Permission Section -->
+                <div style="margin-bottom: 1rem;">
+                    <p>We need to track your location to verify attendance.</p>
+                    <button type="button" id="btnAllowLocation" disabled>Allow Access</button>
+                </div>
+                <button type="button" id="btnFinish" disabled>Next</button>
+            </form>
+        </div>
+    </section>
+
+    <!-- Frame 4 -->
+    <section id="frame4" style="display: none;">
+        <div class="content">
+            <h1>Student Attendance Form</h1>
+            <img src="{{ url_for('static', filename='images/student-form-complete.png') }}" alt="Student form complete image">
+            <p>You're all set!<br>Keep this tab open to ensure proper location-tracking throughout the event.</p>
+        </div>
+    </section>

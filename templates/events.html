@@ -1,0 +1,160 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<script>
+    function handleLocationSelection() {
+        var selectedValue = document.getElementById("saved_locations").value;
+        var locationError = document.getElementById("location_error");
+
+        if (selectedValue) {
+            var [lat, lng] = selectedValue.split(",").map(Number);
+            document.getElementById("event_location").value = `${lat},${lng}`;
+            locationError.style.display = "none";
+        }
+    }
+
+    function validateLocation(event) {
+        var location = document.getElementById("event_location").value;
+        var selectedValue = document.getElementById("saved_locations").value;
+        var locationError = document.getElementById("location_error");
+
+        if (!location && !selectedValue) {
+            event.preventDefault();
+            locationError.style.display = "block";
+            return false;
+        }
+        return true;
+    }
+
+    // Populate saved locations from API
+    window.onload = function () {
+        fetch("/api/places")
+            .then(response => response.json())
+            .then(places => {
+                var select = document.getElementById("saved_locations");
+                places.forEach(place => {
+                    var option = document.createElement("option");
+                    option.value = `${place.latitude},${place.longitude}`;
+                    option.textContent = `${place.name} (${place.building})`;
+                    select.appendChild(option);
+                });
+            })
+            .catch(error => console.error("Error fetching places:", error));
+    };
+</script>
+
+<style>
+    body {
+        font-family: 'Segoe UI', sans-serif;
+        margin: 30px;
+        background-color: #f5f6f7;
+        color: #333;
+    }
+
+    h1 {
+        color: #0056b3;
+        margin-bottom: 20px;
+    }
+
+    form {
+        background-color: #fff;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+        margin-bottom: 30px;
+        max-width: 600px;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    td {
+        padding: 10px;
+    }
+
+    label {
+        font-weight: bold;
+    }
+
+    input,
+    button,
+    select {
+        margin-top: 5px;
+        padding: 10px;
+        width: 100%;
+        margin-bottom: 15px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        box-sizing: border-box;
+    }
+
+    button {
+        background-color: #0056b3;
+        color: #fff;
+        cursor: pointer;
+        transition: background-color 0.3s;
+    }
+
+    button:hover {
+        background-color: #004494;
+    }
+
+    #location_error {
+        color: red;
+    }
+</style>
+
+<body>
+    <h1>🎓 Event Management</h1>
+
+    <!-- Event Creation Form -->
+    <form action="/submit_event" method="post">
+        <table>
+            <tr>
+                <td><label for="event_name">Event Name:</label></td>
+                <td><input type="text" id="event_name" name="event_name" required></td>
+            </tr>
+            <tr>
+                <td><label for="event_date">Event Date:</label></td>
+                <td><input type="date" id="event_date" name="event_date" required></td>
+            </tr>
+            <tr>
+                <td><label for="start_time">Start Time:</label></td>
+                <td><input type="time" id="start_time" name="start_time" required></td>
+            </tr>
+            <tr>
+                <td><label for="stop_time">End Time:</label></td>
+                <td><input type="time" id="stop_time" name="stop_time" required></td>
+            </tr>
+            <tr>
+                <td><label for="saved_locations">Choose a Location:</label></td>
+                <td>
+                    <select id="saved_locations" onchange="handleLocationSelection()">
+                        <option value="">-- Select a saved location --</option>
+                        <!-- Options populated dynamically -->
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <td colspan="2">
+                    <button type="button" onclick="window.location.href='http://127.0.0.1:5000/places'">➕ Create New Place</button>
+                </td>
+            </tr>
+            <tr>
+                <td colspan="2">
+                    <input type="hidden" id="event_location" name="event_location">
+                    <p id="location_error" style="display: none;">⚠️ Please select a location before submitting.</p>
+                </td>
+            </tr>
+            <tr>
+                <td colspan="2">
+                    <button type="submit" onclick="validateLocation(event)">Create Event</button>
+                </td>
+            </tr>
+        </table>
+    </form>
+</body>
+
+{% endblock %}
