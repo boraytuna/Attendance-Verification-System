@@ -1,7 +1,7 @@
 # Needs to be actual db
 attendance.db
 
-# Needs to be actual db
+# Needs to be stored in an actual db
 qr_codes
 
 # macOS system file
