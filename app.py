@@ -166,6 +166,7 @@ def places():
     conn.close()
     return render_template("places.html", places=places)
 
+
 # Function to generate (or retrieve) QR code
 def get_or_create_qr_code(event_id):
     qr_code_path = os.path.join(QR_CODE_FOLDER, f"event_{event_id}.png")
