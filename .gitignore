@@ -11,11 +11,10 @@ qr_codes
 __pycache__/
 *.pyc
 
-# IDE-specific files (for JetBrains IDEs like PyCharm)
+# JetBrains / PyCharm / IntelliJ
 .idea/
-
-# Compiled project files
 *.iml
 
-# Generated files or outputs
-qr_cod
+# VS Code
+.vscode/
+
