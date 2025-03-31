@@ -1,21 +1,33 @@
 {% extends 'base.html' %}
 {% block content %}
 
-<!-- Google Maps API -->
-<script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAzf_3rNo5yi24L3Mu35o5VHa
-    w1PwVmeTs&callback=initMap">
-    </script>
-
 <script>
-    let map;
-    let marker;
-    let geocoder;
-    const defaultCenter = { lat: 42.0792, lng: -78.4823 };
+    function handleLocationSelection() {
+        var selectedValue = document.getElementById("saved_locations").value;
+        var locationError = document.getElementById("location_error");
 
-    function initMap() {
-        geocoder = new google.maps.Geocoder();
+        if (selectedValue) {
+            var [lat, lng] = selectedValue.split(",").map(Number);
+            document.getElementById("event_location").value = `${lat},${lng}`;
+            locationError.style.display = "none";
+        }
+    }
 
-        // Fetch stored locations from /api/places and populate dropdown
+    function validateLocation(event) {
+        var location = document.getElementById("event_location").value;
+        var selectedValue = document.getElementById("saved_locations").value;
+        var locationError = document.getElementById("location_error");
+
+        if (!location && !selectedValue) {
+            event.preventDefault();
+            locationError.style.display = "block";
+            return false;
+        }
+        return true;
+    }
+
+    // Populate saved locations from API
+    window.onload = function () {
         fetch("/api/places")
             .then(response => response.json())
             .then(places => {
@@ -28,100 +40,7 @@
                 });
             })
             .catch(error => console.error("Error fetching places:", error));
-
-        // Handle location selection
-        window.handleLocationSelection = function () {
-            var selectedValue = document.getElementById("saved_locations").value;
-            var locationError = document.getElementById("location_error");
-
-            if (selectedValue === "show_map") {
-                document.getElementById("map-container").style.display = "block";
-
-                if (!map) {
-                    map = new google.maps.Map(document.getElementById("map"), {
-                        zoom: 15,
-                        center: defaultCenter
-                    });
-
-                    marker = new google.maps.Marker({
-                        position: defaultCenter,
-                        map: map,
-                        draggable: true
-                    });
-
-                    marker.addListener('dragend', function (event) {
-                        var lat = event.latLng.lat();
-                        var lng = event.latLng.lng();
-                        document.getElementById('event_location').value = `${lat},${lng}`;
-
-                        geocoder.geocode({ location: { lat: lat, lng: lng } }, function (results, status) {
-                            if (status === 'OK' && results[0]) {
-                                document.getElementById('event_address').value = results[0].formatted_address;
-                            } else {
-                                console.error("Geocode error: " + status);
-                            }
-                        });
-                    });
-                }
-            } else if (selectedValue) {
-                document.getElementById("map-container").style.display = "none";
-                var [lat, lng] = selectedValue.split(",").map(Number);
-                document.getElementById("event_location").value = `${lat},${lng}`;
-                geocoder.geocode({ location: { lat: lat, lng: lng } }, function (results, status) {
-                    if (status === 'OK' && results[0]) {
-                        document.getElementById('event_address').value = results[0].formatted_address;
-                    } else {
-                        console.error("Geocode error: " + status);
-                        document.getElementById("event_address").value = document.getElementById("saved_locations").options[
-                            document.getElementById("saved_locations").selectedIndex
-                        ].text;
-                    }
-                });
-            }
-
-            if (selectedValue || document.getElementById("event_location").value) {
-                locationError.style.display = "none";
-            }
-        };
-
-        // Ensure at least one location is selected before submission
-        window.validateLocation = function (event) {
-            var location = document.getElementById("event_location").value;
-            var selectedValue = document.getElementById("saved_locations").value;
-            var locationError = document.getElementById("location_error");
-
-            if (!location && !selectedValue) {
-                event.preventDefault();
-                locationError.style.display = "block";
-                return false;
-            }
-
-            // Delay form submission until geocoder returns
-            if (selectedValue && selectedValue !== "show_map") {
-                event.preventDefault(); // pause form
-
-                var [lat, lng] = selectedValue.split(",").map(Number);
-
-                geocoder.geocode({ location: { lat: lat, lng: lng } }, function (results, status) {
-                    if (status === 'OK' && results[0]) {
-                        document.getElementById('event_address').value = results[0].formatted_address;
-                    } else {
-                        document.getElementById("event_address").value = document.getElementById("saved_locations").options[
-                            document.getElementById("saved_locations").selectedIndex
-                        ].text;
-                    }
-
-                    // Only submit AFTER address is set
-                    document.querySelector("form").submit();
-                });
-
-                return false; // stop for now
-            }
-
-            return true;
-        };
-
-    }
+    };
 </script>
 
 <style>
@@ -146,10 +65,17 @@
         max-width: 600px;
     }
 
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    td {
+        padding: 10px;
+    }
+
     label {
         font-weight: bold;
-        display: block;
-        margin-top: 15px;
     }
 
     input,
@@ -175,80 +101,59 @@
         background-color: #004494;
     }
 
-    #map {
-        height: 300px;
-        width: 100%;
-        margin-top: 20px;
-        border: 2px solid #ccc;
-        border-radius: 10px;
-    }
-
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 30px;
-        background-color: #fff;
-        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-    }
-
-    th,
-    td {
-        padding: 12px;
-        border: 1px solid #ccc;
-        text-align: left;
-    }
-
-    th {
-        background-color: #0056b3;
-        color: #fff;
-    }
-
-    .qr-buttons {
-        display: flex;
-        gap: 5px;
-    }
-
-    .qr-buttons button {
-        width: auto;
-        padding: 8px 12px;
-        font-size: 14px;
+    #location_error {
+        color: red;
     }
 </style>
 
-<body onload="initMap()">
+<body>
     <h1>🎓 Event Management</h1>
 
     <!-- Event Creation Form -->
     <form action="/submit_event" method="post">
-        <label for="event_name">Event Name:</label>
-        <input type="text" id="event_name" name="event_name" required>
-
-        <label for="event_date">Event Date:</label>
-        <input type="date" id="event_date" name="event_date" required>
-
-        <label for="start_time">Start Time:</label>
-        <input type="time" id="start_time" name="start_time" required>
-
-        <label for="stop_time">End Time:</label>
-        <input type="time" id="stop_time" name="stop_time" required>
-
-        <label for="saved_locations">Choose a Location:</label>
-        <select id="saved_locations" onchange="handleLocationSelection()">
-            <option value="">-- Select a saved location --</option>
-            <option value="show_map">🔍 Show Map (Pick a New Location)</option>
-        </select>
-
-        <input type="hidden" id="event_location" name="event_location">
-        <input type="hidden" id="event_address" name="event_address">
-
-        <div id="map-container" style="display: none;">
-            <h3>🗺️ Select a New Location on the Map:</h3>
-            <div id="map"></div>
-        </div>
-
-        <p id="location_error" style="color: red; display: none;">⚠️ Please select a location before submitting.</p>
-
-        <button type="submit" onclick="validateLocation(event)">Create Event</button>
+        <table>
+            <tr>
+                <td><label for="event_name">Event Name:</label></td>
+                <td><input type="text" id="event_name" name="event_name" required></td>
+            </tr>
+            <tr>
+                <td><label for="event_date">Event Date:</label></td>
+                <td><input type="date" id="event_date" name="event_date" required></td>
+            </tr>
+            <tr>
+                <td><label for="start_time">Start Time:</label></td>
+                <td><input type="time" id="start_time" name="start_time" required></td>
+            </tr>
+            <tr>
+                <td><label for="stop_time">End Time:</label></td>
+                <td><input type="time" id="stop_time" name="stop_time" required></td>
+            </tr>
+            <tr>
+                <td><label for="saved_locations">Choose a Location:</label></td>
+                <td>
+                    <select id="saved_locations" onchange="handleLocationSelection()">
+                        <option value="">-- Select a saved location --</option>
+                        <!-- Options populated dynamically -->
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <td colspan="2">
+                    <button type="button" onclick="window.location.href='http://127.0.0.1:5000/places'">➕ Create New Place</button>
+                </td>
+            </tr>
+            <tr>
+                <td colspan="2">
+                    <input type="hidden" id="event_location" name="event_location">
+                    <p id="location_error" style="display: none;">⚠️ Please select a location before submitting.</p>
+                </td>
+            </tr>
+            <tr>
+                <td colspan="2">
+                    <button type="submit" onclick="validateLocation(event)">Create Event</button>
+                </td>
+            </tr>
+        </table>
     </form>
 </body>
 

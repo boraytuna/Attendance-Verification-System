@@ -108,7 +108,13 @@
             <td>{{ event['eventName'] }}</td>
             <td>{{ event['eventDate'] }}</td>
             <td>{{ event['startTime'] }}</td>
-            <td>{{ event['eventAddress'] or event['latitude'] ~ ", " ~ event['longitude'] }}</td>
+            <td>
+                {% if event['place_name'] and event['building'] %}
+                    {{ event['place_name'] }}, {{ event['building'] }}
+                {% else %}
+                    {{ event['eventAddress'] or event['latitude'] ~ ", " ~ event['longitude'] }}
+                {% endif %}
+            </td>
             <td>
                 <div class="qr-buttons">
                     <a href="/qr_code/{{ event['eventID'] }}">
@@ -142,7 +148,13 @@
             <td>{{ event['eventName'] }}</td>
             <td>{{ event['eventDate'] }}</td>
             <td>{{ event['startTime'] }}</td>
-            <td>{{ event['eventAddress'] or event['latitude'] ~ ", " ~ event['longitude'] }}</td>
+            <td>
+                {% if event['place_name'] and event['building'] %}
+                    {{ event['place_name'] }}, {{ event['building'] }}
+                {% else %}
+                    {{ event['eventAddress'] or event['latitude'] ~ ", " ~ event['longitude'] }}
+                {% endif %}
+            </td>
             <td>
                 <div class="qr-buttons">
                     <a href="/qr_code/{{ event['eventID'] }}">

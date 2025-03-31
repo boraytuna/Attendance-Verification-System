@@ -119,7 +119,9 @@ def dashboard():
 
     # Upcoming events: event start is in the future
     cursor.execute("""
-        SELECT * FROM events 
+        SELECT e.*, p.name AS place_name, p.building
+        FROM events e
+        LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
         WHERE eventDate || 'T' || startTime >= ?
         ORDER BY eventDate, startTime
     """, (now,))
@@ -127,7 +129,9 @@ def dashboard():
 
     # Past events: event has already ended
     cursor.execute("""
-        SELECT * FROM events 
+        SELECT e.*, p.name AS place_name, p.building
+        FROM events e
+        LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
         WHERE eventDate || 'T' || stopTime < ?
         ORDER BY eventDate DESC, startTime DESC
     """, (now,))
@@ -390,7 +394,6 @@ with app.app_context():
     pass
     send_professor_emails()
 
-# Route: Handle Event Creation
 @app.route("/submit_event", methods=["POST"])
 def submit_event():
     event_name = request.form["event_name"]
@@ -399,6 +402,7 @@ def submit_event():
     stop_time = request.form["stop_time"]
     event_location = request.form["event_location"]
     event_address = request.form.get("event_address", "Unknown Location")
+    
     try:
         lat, lng = map(float, event_location.split(","))
     except ValueError:
@@ -418,7 +422,7 @@ def submit_event():
 
     get_or_create_qr_code(event_id)
 
-    return redirect("/dashboard?success=1")
+    return redirect("/events")
 
 # Route: API endpoint for event list (returns JSON)
 @app.route("/api/events", methods=["GET"])
