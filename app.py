@@ -102,24 +102,39 @@ def create_tables():
                 building TEXT NOT NULL,
                 address TEXT NULL
             )
-    ''')
+        ''')
 
     conn.commit()
     conn.close()
 
 # Ensure database tables exist
 create_tables()
-
-# Route: Dashboard
 @app.route("/")
 @app.route("/dashboard")
 def dashboard():
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM events")
-    events = cursor.fetchall()
+
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+    # Upcoming events: event start is in the future
+    cursor.execute("""
+        SELECT * FROM events 
+        WHERE eventDate || 'T' || startTime >= ?
+        ORDER BY eventDate, startTime
+    """, (now,))
+    upcoming = cursor.fetchall()
+
+    # Past events: event has already ended
+    cursor.execute("""
+        SELECT * FROM events 
+        WHERE eventDate || 'T' || stopTime < ?
+        ORDER BY eventDate DESC, startTime DESC
+    """, (now,))
+    past = cursor.fetchall()
+
     conn.close()
-    return render_template("dashboard.html", events=events)
+    return render_template("dashboard.html", upcoming_events=upcoming, past_events=past)
 
 # Route: Events Page
 @app.route("/events", methods=["GET"])
@@ -383,7 +398,6 @@ def submit_event():
     stop_time = request.form["stop_time"]
     event_location = request.form["event_location"]
     event_address = request.form.get("event_address", "Unknown Location")
-    
     try:
         lat, lng = map(float, event_location.split(","))
     except ValueError:
@@ -403,7 +417,7 @@ def submit_event():
 
     get_or_create_qr_code(event_id)
 
-    return redirect("/events")
+    return redirect("/dashboard?success=1")
 
 # Route: API endpoint for event list (returns JSON)
 @app.route("/api/events", methods=["GET"])

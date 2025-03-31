@@ -3,10 +3,13 @@
   <component name="Flask">
     <option name="enabled" value="true" />
   </component>
+<<<<<<< HEAD
   <component name="PyDocumentationSettings">
     <option name="format" value="PLAIN" />
     <option name="myDocStringFormat" value="Plain" />
   </component>
+=======
+>>>>>>> Professor-Create-Event-Interface
   <component name="TemplatesService">
     <option name="TEMPLATE_CONFIGURATION" value="Jinja2" />
     <option name="TEMPLATE_FOLDERS">

@@ -1,3 +1,21 @@
+# Needs to be actual db
 attendance.db
-populateAttendanceDB.py
+
+# Needs to be actual db
 qr_codes
+
+# macOS system file
+.DS_Store
+
+# Python bytecode cache
+__pycache__/
+*.pyc
+
+# IDE-specific files (for JetBrains IDEs like PyCharm)
+.idea/
+
+# Compiled project files
+*.iml
+
+# Generated files or outputs
+qr_cod
