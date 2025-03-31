@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,6 +13,7 @@
             margin: 0;
             padding: 0;
         }
+
         nav {
             background-color: #0056b3;
             width: 100%;
@@ -21,6 +23,7 @@
             padding: 15px 0;
             box-sizing: border-box;
         }
+
         nav a {
             color: white;
             text-decoration: none;
@@ -29,23 +32,29 @@
             flex-grow: 1;
             text-align: center;
         }
+
         nav a:hover {
             background-color: #004494;
             text-decoration: none;
         }
+
         .container {
             padding: 20px;
             text-align: center;
         }
     </style>
 </head>
+
 <body>
 
-    {% include 'header.html' %}  <!-- Ensure this line is present in base.html -->
+    {% include 'header.html' %}
 
-    <div class="container">
-        {% block content %}{% endblock %}
+    <div class="content">
+        {% block content %}
+        {% endblock %}
     </div>
 
+
 </body>
+
 </html>
