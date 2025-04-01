@@ -522,20 +522,24 @@ def get_places():
 
 @app.route('/find_student', methods=['GET', 'POST'])
 def find_student():
-    students = None  # Ensuring we differentiate between no search and empty results
+    students = None  # Ensure we differentiate between no search and empty results
 
     if request.method == 'POST':
-        student_name = request.form['student_name'].strip()
+        first_name = request.form['first_name'].strip()
+        last_name = request.form['last_name'].strip()
 
-        if student_name:  # Prevent empty queries
+        if first_name or last_name:  # Ensure at least one field is filled
             conn = get_db_connection()
             cursor = conn.cursor()
 
             query = '''
             SELECT * FROM student_checkins 
-            WHERE firstName LIKE ? OR lastName LIKE ?
+            WHERE (firstName LIKE ? OR lastName LIKE ?)
             '''
-            cursor.execute(query, (f'%{student_name}%', f'%{student_name}%'))
+
+            params = [f'%{first_name}%', f'%{last_name}%']
+
+            cursor.execute(query, params)
             students = cursor.fetchall()
             conn.close()
 
