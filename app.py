@@ -3,12 +3,10 @@ from flask_mail import Mail, Message
 import sqlite3
 import os
 import segno
-import requests
 import random
-from datetime import datetime
-import schedule
-import time
-from threading import Thread
+from datetime import datetime, timedelta
+
+
 
 app = Flask(__name__)
 
@@ -78,6 +76,8 @@ def create_tables():
             scannedEventID INTEGER NOT NULL,
             studentLocation TEXT NOT NULL,
             checkinTime DATETIME DEFAULT CURRENT_TIMESTAMP,
+            endLocation TEXT NOT NULL,
+            endTime DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (scannedEventID) REFERENCES events(eventID)
         )
     ''')
@@ -87,7 +87,7 @@ def create_tables():
         CREATE TABLE IF NOT EXISTS attendance_status (
             statusID INTEGER PRIMARY KEY AUTOINCREMENT,
             checkinID INTEGER NOT NULL,
-            attendanceStatus TEXT NOT NULL CHECK (attendanceStatus IN ('Attended', 'Left Early')),
+            attendanceStatus TEXT NOT NULL CHECK (attendanceStatus IN ('Attended', 'Left Early', 'Attended Late')),
             FOREIGN KEY (checkinID) REFERENCES student_checkins(checkinID)
         )
     ''')
@@ -169,7 +169,6 @@ def places():
     places = cursor.fetchall()
     conn.close()
     return render_template("places.html", places=places)
-
 
 # Function to generate (or retrieve) QR code
 def get_or_create_qr_code(event_id):
@@ -279,7 +278,7 @@ def search_professors():
     conn.close()
     return jsonify([row[0] for row in results])
 
-# **API Route for Submitting Student Check-In Form**
+# **API Routes for Submitting Student Check-In Form**
 @app.route('/submit_student_checkin', methods=['POST'])
 def submit_student_checkin():
     data = request.json
@@ -296,6 +295,31 @@ def submit_student_checkin():
         INSERT INTO student_checkins (firstName, lastName, email, classForExtraCredit, professorForExtraCredit, scannedEventID, studentLocation)
         VALUES (?, ?, ?, ?, ?, ?, ?)''',
         (firstName, lastName, email, classForExtraCredit, professorForExtraCredit, scannedEventID, studentLocation))
+    conn.commit()
+    conn.close()
+
+    return jsonify({'status': 'success'})
+
+# New Route: To submit end location to the student checkin form
+@app.route('/submit_end_location', methods=['POST'])
+def submit_end_location():
+    print("📍 /submit_end_location called")
+    data = request.json
+    email = data['email']
+    scannedEventID = int(data['scannedEventID'])
+    endLocation = str(data['endLocation'])
+    endTime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    lastName = data['lastName']
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        UPDATE student_checkins
+        SET endLocation = ?, endTime = ?
+        WHERE email = ? AND scannedEventID = ? AND lastName = ?
+    ''', (endLocation, endTime, email, scannedEventID, lastName))
+
     conn.commit()
     conn.close()
 
@@ -496,5 +520,6 @@ def get_places():
     ]
     return jsonify(places_list)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
+    # Run the Flask app
     app.run(debug=True)
