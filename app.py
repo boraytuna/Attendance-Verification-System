@@ -22,7 +22,7 @@ schedule = Scheduler()
 
 def run_scheduler():
     while True:
-        print(schedule) #for testing - see queued jobs
+        #print(schedule) #for testing - see queued jobs
         schedule.exec_jobs()
         time.sleep(10) #execute overdue jobs every 10 seconds
 
