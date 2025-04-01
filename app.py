@@ -155,10 +155,10 @@ def events():
 def calendar():
     return render_template("calendar.html")
 
-# Route: Find Student Page
-@app.route("/find_student")
-def find_student():
-    return render_template("find_student.html")
+# # Route: Find Student Page
+# @app.route("/find_student")
+# def find_student():
+#     return render_template("find_student.html")
 
 # Route: Places Page
 @app.route("/places")
@@ -520,6 +520,26 @@ def get_places():
     ]
     return jsonify(places_list)
 
-if __name__ == '__main__':
-    # Run the Flask app
+@app.route('/find_student', methods=['GET', 'POST'])
+def find_student():
+    students = None  # Ensuring we differentiate between no search and empty results
+
+    if request.method == 'POST':
+        student_name = request.form['student_name'].strip()
+
+        if student_name:  # Prevent empty queries
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            query = '''
+            SELECT * FROM student_checkins 
+            WHERE firstName LIKE ? OR lastName LIKE ?
+            '''
+            cursor.execute(query, (f'%{student_name}%', f'%{student_name}%'))
+            students = cursor.fetchall()
+            conn.close()
+
+    return render_template('find_student.html', students=students)
+
+if __name__ == "__main__":
     app.run(debug=True)

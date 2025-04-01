@@ -51,9 +51,30 @@
         color: #333;
     }
 
+    .content-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .title-container {
+        text-align: center;
+        margin-bottom: 20px;
+        width: 100%;
+    }
+
     h1 {
         color: #0056b3;
-        margin-bottom: 20px;
+        font-size: 24px;
+        margin-bottom: 10px;
+    }
+
+    .form-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 100%;
     }
 
     form {
@@ -61,8 +82,8 @@
         padding: 20px;
         border-radius: 10px;
         box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
-        margin-bottom: 30px;
         max-width: 600px;
+        width: 100%;
     }
 
     table {
@@ -107,54 +128,59 @@
 </style>
 
 <body>
-    <h1>🎓 Event Management</h1>
+    <div class="content-container">
+        <div class="title-container">
+            <h1>🎓 Event Management</h1>
+        </div>
 
-    <!-- Event Creation Form -->
-    <form action="/submit_event" method="post">
-        <table>
-            <tr>
-                <td><label for="event_name">Event Name:</label></td>
-                <td><input type="text" id="event_name" name="event_name" required></td>
-            </tr>
-            <tr>
-                <td><label for="event_date">Event Date:</label></td>
-                <td><input type="date" id="event_date" name="event_date" required></td>
-            </tr>
-            <tr>
-                <td><label for="start_time">Start Time:</label></td>
-                <td><input type="time" id="start_time" name="start_time" required></td>
-            </tr>
-            <tr>
-                <td><label for="stop_time">End Time:</label></td>
-                <td><input type="time" id="stop_time" name="stop_time" required></td>
-            </tr>
-            <tr>
-                <td><label for="saved_locations">Choose a Location:</label></td>
-                <td>
-                    <select id="saved_locations" onchange="handleLocationSelection()">
-                        <option value="">-- Select a saved location --</option>
-                        <!-- Options populated dynamically -->
-                    </select>
-                </td>
-            </tr>
-            <tr>
-                <td colspan="2">
-                    <button type="button" onclick="window.location.href='http://127.0.0.1:5000/places'">➕ Create New Place</button>
-                </td>
-            </tr>
-            <tr>
-                <td colspan="2">
-                    <input type="hidden" id="event_location" name="event_location">
-                    <p id="location_error" style="display: none;">⚠️ Please select a location before submitting.</p>
-                </td>
-            </tr>
-            <tr>
-                <td colspan="2">
-                    <button type="submit" onclick="validateLocation(event)">Create Event</button>
-                </td>
-            </tr>
-        </table>
-    </form>
+        <div class="form-container">
+            <form action="/submit_event" method="post">
+                <table>
+                    <tr>
+                        <td><label for="event_name">Event Name:</label></td>
+                        <td><input type="text" id="event_name" name="event_name" required></td>
+                    </tr>
+                    <tr>
+                        <td><label for="event_date">Event Date:</label></td>
+                        <td><input type="date" id="event_date" name="event_date" required></td>
+                    </tr>
+                    <tr>
+                        <td><label for="start_time">Start Time:</label></td>
+                        <td><input type="time" id="start_time" name="start_time" required></td>
+                    </tr>
+                    <tr>
+                        <td><label for="stop_time">End Time:</label></td>
+                        <td><input type="time" id="stop_time" name="stop_time" required></td>
+                    </tr>
+                    <tr>
+                        <td><label for="saved_locations">Choose a Location:</label></td>
+                        <td>
+                            <select id="saved_locations" onchange="handleLocationSelection()">
+                                <option value="">-- Select a saved location --</option>
+                                <!-- Options populated dynamically -->
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="2">
+                            <button type="button" onclick="window.location.href='http://127.0.0.1:5000/places'">➕ Create New Place</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="2">
+                            <input type="hidden" id="event_location" name="event_location">
+                            <p id="location_error" style="display: none;">⚠️ Please select a location before submitting.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="2">
+                            <button type="submit" onclick="validateLocation(event)">Create Event</button>
+                        </td>
+                    </tr>
+                </table>
+            </form>
+        </div>
+    </div>
 </body>
 
 {% endblock %}
