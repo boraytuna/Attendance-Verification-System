@@ -5,10 +5,10 @@ import os
 import segno
 import requests
 import random
-from datetime import datetime
-import schedule
+from datetime import datetime, timedelta
+from scheduler import Scheduler
 import time
-from threading import Thread
+import threading
 
 app = Flask(__name__)
 
@@ -17,6 +17,19 @@ QR_CODE_FOLDER = "qr_codes"
 
 #session key
 app.secret_key = os.urandom(24)
+
+#scheduler for scheduling professor attendance emails
+schedule = Scheduler()
+
+def run_scheduler():
+    while True:
+        print(schedule) #for testing - see queued jobs
+        schedule.exec_jobs()
+        time.sleep(10) #execute overdue jobs every 10 seconds
+
+#run scheduler in a separate background thread (so it can run infinitely)
+scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
+scheduler_thread.start()
 
 #mail server configuration
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
@@ -302,7 +315,7 @@ def submit_student_checkin():
     return jsonify({'status': 'success'})
 
 # **Functions for Generating and Sending Emails to Professors Post-Event**
-def construct_email_records():
+def construct_email_records(event_id):
     """
     Collect a list of professors and their students' attendance records
     to be used to generate emails.
@@ -313,41 +326,66 @@ def construct_email_records():
     """
     conn = get_db_connection()
 
-    #get student information and their attendance status records
+    """
+    match student_checkins with attendance status records (get all of the
+    student_checkins that have an attendance status) for the event with
+    the given event_id
+    """
     results = conn.cursor().execute('''
         SELECT sc.firstName, sc.lastName, sc.classForExtraCredit, sc.professorForExtraCredit, atd.attendanceStatus
         FROM student_checkins sc
         JOIN attendance_status atd ON sc.checkinID = atd.checkinID
-    ''').fetchall()
+        WHERE sc.scannedEventID = ?
+    ''', (event_id,)).fetchall()
 
-    #get unique professor names to use as keys in the dictionary
+    """
+    from the student_checkins that have an attendance status for the
+    event with the passed event_id, get a unique list of listed professors
+    for extra credit - these will be used as keys in the emails dictionary
+    for tracking recipients to send student attendance records to
+    """
     professors = conn.cursor().execute('''
         SELECT DISTINCT sc.professorForExtraCredit
         FROM student_checkins sc
         JOIN attendance_status atd ON sc.checkinID = atd.checkinID
-    ''').fetchall()
+        WHERE sc.scannedEventID = ?
+    ''', (event_id,)).fetchall()
     conn.close()
 
     #create a dictionary with professor names as keys
-    #and a list of student details as values
     emails = {}
     for professor in professors:
         records = []
         professor_name = professor[0]
+        #initialize empty list for each key's value
         emails[professor_name] = records
 
+        """
+        iterate through the list of student_checkins with an attendance status
+        for the event with the passed event_id, and if the professor name
+        matches the current key, append the student's details to the list -
+        each item in the list will be a row in the table emailed to the prof
+        """
         for result in results:
             if result[3] == professor_name:
                 records.append(f'{result[0]} {result[1]} - {result[2]} - {result[4]}')
 
     return emails
 
-def send_professor_emails():
+def send_professor_emails(event_id):
     """
     Send emails to professors with a summary of student attendance records.
     """
-    emails = construct_email_records()
+    emails = construct_email_records(event_id)
     professors = (emails.keys())
+
+    #get the event name associated with the eventID
+    conn = get_db_connection()
+    events = conn.cursor().execute('''
+        SELECT eventName FROM events WHERE eventID = ?
+    ''', (event_id,)).fetchone()
+    conn.close()
+    event_name = events[0]
 
     conn_fakedb = get_fakedb_connection()
     for professor in professors:
@@ -358,12 +396,12 @@ def send_professor_emails():
 
         #format student attendance records as an html body, use plaintext as
         #backup if html within email is unsupported
-        plaintext_msg = 'Hello ' + professor + '! The following students recently attended an event for course credit:\n' + '\n'.join(emails[professor])
+        plaintext_msg = 'Hello ' + professor + '! The following students recently attended the event, ' + event_name + ', for course credit:\n' + '\n'.join(emails[professor])
         html_msg = f'''
         <html>
             <body>
                 <p>Hello {professor},</p>
-                <p>The following students recently attended an event for course credit:</p>
+                <p>The following students recently attended the event, {event_name}, for course credit:</p>
                 <table border="1" style="border-collapse: collapse; width: 100%;">
                     <tr>
                         <th style="padding: 8px; text-align: left; border: 1px solid black;">Name</th>
@@ -378,21 +416,16 @@ def send_professor_emails():
             </body>
         </html>
         '''
-        msg = Message (
-            subject='Student Attendance Notification',
-            recipients=[professor_email[0]],
-            body=plaintext_msg,
-            html=html_msg
-        )
-        mail.send(msg)
+        with app.app_context():
+            msg = Message (
+                subject='Student Attendance Notification',
+                recipients=[professor_email[0]],
+                body=plaintext_msg,
+                html=html_msg
+            )
+            mail.send(msg)
 
     conn_fakedb.close()
-
-#TODO - this occurs immediately upon app startup, need to change
-#to a scheduled duration or decide on something else?
-with app.app_context():
-    pass
-    send_professor_emails()
 
 @app.route("/submit_event", methods=["POST"])
 def submit_event():
@@ -421,6 +454,22 @@ def submit_event():
     conn.close()
 
     get_or_create_qr_code(event_id)
+
+    #deconstruct eventDate and stopTime to be used in datetime
+    year = event_date.split("-")[0]
+    month = event_date.split("-")[1]
+    day = event_date.split("-")[2]
+    hour = stop_time.split(":")[0]
+    minute = stop_time.split(":")[1]
+
+    delta_t = 5 #wait 5 mins after event end to send email
+    executetime = datetime(int(year), int(month), int(day), int(hour), int(minute)) + timedelta(minutes=delta_t)
+
+    #schedule the email to be sent delta_t mins after event end
+    schedule.once(executetime, lambda: send_professor_emails(event_id))
+
+    #testing
+    #print("Job scheduled for " + executetime.strftime("%Y-%m-%d %H:%M:%S"))
 
     return redirect("/events")
 
