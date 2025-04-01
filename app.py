@@ -90,7 +90,7 @@ def create_tables():
             scannedEventID INTEGER NOT NULL,
             studentLocation TEXT NOT NULL,
             checkinTime DATETIME DEFAULT CURRENT_TIMESTAMP,
-            endLocation TEXT NOT NULL,
+            endLocation TEXT,
             endTime DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (scannedEventID) REFERENCES events(eventID)
         )
