@@ -1,11 +1,11 @@
-from flask import Flask, session, render_template, request, redirect, jsonify, send_file
+from flask import Flask, session, render_template, request, redirect, jsonify, send_file, flash, url_for
 from flask_mail import Mail, Message
 import sqlite3
 import os
 import segno
 import random
 from datetime import datetime, timedelta
-from scheduler import Scheduler
+from apscheduler.schedulers.background import BackgroundScheduler
 import time
 import threading
 
@@ -18,17 +18,16 @@ QR_CODE_FOLDER = "qr_codes"
 app.secret_key = os.urandom(24)
 
 #scheduler for scheduling professor attendance emails
-schedule = Scheduler()
+schedule = BackgroundScheduler()
 
-def run_scheduler():
-    while True:
-        #print(schedule) #for testing - see queued jobs
-        schedule.exec_jobs()
-        time.sleep(10) #execute overdue jobs every 10 seconds
+#Done by Olu same while loop upated for new import
+def my_job():
+    print("Running scheduled job...")
 
-#run scheduler in a separate background thread (so it can run infinitely)
-scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
-scheduler_thread.start()
+schedule = BackgroundScheduler()
+schedule.add_job(my_job, 'interval', seconds=10)
+schedule.start()
+
 
 #mail server configuration
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
@@ -123,7 +122,10 @@ def create_tables():
 
 # Ensure database tables exist
 create_tables()
-@app.route("/")
+@app.route("/") #Made by olu
+def home():
+    return redirect(url_for("dashboard"))
+
 @app.route("/dashboard")
 def dashboard():
     conn = get_db_connection()
@@ -451,7 +453,6 @@ def send_professor_emails(event_id):
             mail.send(msg)
 
     conn_fakedb.close()
-
 @app.route("/submit_event", methods=["POST"])
 def submit_event():
     event_name = request.form["event_name"]
@@ -460,43 +461,58 @@ def submit_event():
     stop_time = request.form["stop_time"]
     event_location = request.form["event_location"]
     event_address = request.form.get("event_address", "Unknown Location")
-    
+
+    # NEW: First parse lat/lng before anything else
     try:
         lat, lng = map(float, event_location.split(","))
     except ValueError:
-        return jsonify({"message": "Invalid location format"}), 400
+        flash("❌ Invalid location format.", "error")
+        return redirect(url_for("events"))
 
-    # Use the address provided by the frontend
+    #  NEW: Constraint 1 - Check for valid time logic
+    if start_time >= stop_time:
+        flash("❌ End time must be later than start time.", "error")
+        return redirect(url_for("events"))
+
+    #  NEW: Check for duplicate events at same location & time
     conn = get_db_connection()
     cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM events 
+        WHERE eventDate = ? AND startTime = ? AND stopTime = ? 
+        AND ROUND(latitude, 6) = ROUND(?, 6) AND ROUND(longitude, 6) = ROUND(?, 6)
+     """, (event_date, start_time, stop_time, lat, lng))
+    same_time_place = cursor.fetchone()
+
+    if same_time_place:
+        conn.close()
+        flash("❌ Another event is already scheduled at this time and location.", "error")
+        return redirect(url_for("events"))
+
+    # SAFE TO INSERT NOW
     cursor.execute('''
         INSERT INTO events (eventName, eventDate, startTime, stopTime, latitude, longitude, eventAddress)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     ''', (event_name, event_date, start_time, stop_time, lat, lng, event_address))
-
     event_id = cursor.lastrowid
     conn.commit()
     conn.close()
 
     get_or_create_qr_code(event_id)
 
-    #deconstruct eventDate and stopTime to be used in datetime
-    year = event_date.split("-")[0]
-    month = event_date.split("-")[1]
-    day = event_date.split("-")[2]
-    hour = stop_time.split(":")[0]
-    minute = stop_time.split(":")[1]
+    #  Schedule follow-up email after event ends + 5 minutes
+    try:
+        year, month, day = map(int, event_date.split("-"))
+        hour, minute = map(int, stop_time.split(":"))
+        executetime = datetime(year, month, day, hour, minute) + timedelta(minutes=5)
 
-    delta_t = 5 #wait 5 mins after event end to send email
-    executetime = datetime(int(year), int(month), int(day), int(hour), int(minute)) + timedelta(minutes=delta_t)
+        # 🔁 FIXED: BackgroundScheduler doesn't use .once(), we use add_job instead
+        schedule.add_job(send_professor_emails, 'date', run_date=executetime, args=[event_id])
+    except Exception as e:
+        print(f"Failed to schedule email job: {e}")
 
-    #schedule the email to be sent delta_t mins after event end
-    schedule.once(executetime, lambda: send_professor_emails(event_id))
-
-    #testing
-    #print("Job scheduled for " + executetime.strftime("%Y-%m-%d %H:%M:%S"))
-
-    return redirect("/events")
+    # Redirect with success flag for dashboard notification
+    return redirect(url_for("dashboard", success=1))
 
 # Route: API endpoint for event list (returns JSON)
 @app.route("/api/events", methods=["GET"])
@@ -521,7 +537,6 @@ def get_events():
             "start": start_datetime,
             "end": end_datetime,
             "location": event_dict["eventAddress"],
-            "latitude": event_dict["latitude"],
             "longitude": event_dict["longitude"]
         })
 
