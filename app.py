@@ -9,6 +9,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import time
 import threading
 
+from geopy.distance import geodesic
+
 app = Flask(__name__)
 
 DATABASE_NAME = "attendance.db"
@@ -22,10 +24,10 @@ schedule = BackgroundScheduler()
 
 #Done by Olu same while loop upated for new import
 def my_job():
-    print("Running scheduled job...")
+    evaluate_all_attendance()
 
 schedule = BackgroundScheduler()
-schedule.add_job(my_job, 'interval', seconds=10)
+schedule.add_job(my_job, 'interval', seconds=30)
 schedule.start()
 
 
@@ -100,9 +102,15 @@ def create_tables():
         CREATE TABLE IF NOT EXISTS attendance_status (
             statusID INTEGER PRIMARY KEY AUTOINCREMENT,
             checkinID INTEGER NOT NULL,
-            attendanceStatus TEXT NOT NULL CHECK (attendanceStatus IN ('Attended', 'Left Early', 'Attended Late')),
+            attendanceStatus TEXT NOT NULL CHECK (
+                attendanceStatus IN (
+                    'Attended',
+                    'Attended Late',
+                    'Left Early'
+                )
+            ),
             FOREIGN KEY (checkinID) REFERENCES student_checkins(checkinID)
-        )
+        );
     ''')
 
     # Create Places Table
@@ -295,6 +303,27 @@ def search_professors():
     return jsonify([row[0] for row in results])
 
 # **API Routes for Submitting Student Check-In Form**
+# @app.route('/submit_student_checkin', methods=['POST'])
+# def submit_student_checkin():
+#     data = request.json
+#     firstName = data['firstName']
+#     lastName = data['lastName']
+#     email = data['email']
+#     classForExtraCredit = data['classForExtraCredit']
+#     professorForExtraCredit = data['professorForExtraCredit']
+#     scannedEventID = int(data['scannedEventID'])
+#     studentLocation = str(data['studentLocation'])
+#
+#     conn = get_db_connection()
+#     conn.cursor().execute('''
+#         INSERT INTO student_checkins (firstName, lastName, email, classForExtraCredit, professorForExtraCredit, scannedEventID, studentLocation)
+#         VALUES (?, ?, ?, ?, ?, ?, ?)''',
+#         (firstName, lastName, email, classForExtraCredit, professorForExtraCredit, scannedEventID, studentLocation))
+#     conn.commit()
+#     conn.close()
+#
+#     return jsonify({'status': 'success'})
+
 @app.route('/submit_student_checkin', methods=['POST'])
 def submit_student_checkin():
     data = request.json
@@ -307,10 +336,47 @@ def submit_student_checkin():
     studentLocation = str(data['studentLocation'])
 
     conn = get_db_connection()
-    conn.cursor().execute('''
-        INSERT INTO student_checkins (firstName, lastName, email, classForExtraCredit, professorForExtraCredit, scannedEventID, studentLocation)
-        VALUES (?, ?, ?, ?, ?, ?, ?)''',
-        (firstName, lastName, email, classForExtraCredit, professorForExtraCredit, scannedEventID, studentLocation))
+    cursor = conn.cursor()
+
+    # Insert student check-in
+    cursor.execute('''
+        INSERT INTO student_checkins (
+            firstName, lastName, email, classForExtraCredit,
+            professorForExtraCredit, scannedEventID, studentLocation
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        firstName, lastName, email, classForExtraCredit,
+        professorForExtraCredit, scannedEventID, studentLocation
+    ))
+
+    # Get checkinID for this new row
+    cursor.execute('''
+        SELECT checkinID, checkinTime FROM student_checkins
+        WHERE email = ? AND scannedEventID = ? AND lastName = ?
+        ORDER BY checkinTime DESC LIMIT 1
+    ''', (email, scannedEventID, lastName))
+    result = cursor.fetchone()
+
+    checkin_id = result["checkinID"]
+    checkin_time = datetime.strptime(result["checkinTime"], "%Y-%m-%d %H:%M:%S")
+
+    # Fetch event start time
+    cursor.execute('SELECT eventDate, startTime FROM events WHERE eventID = ?', (scannedEventID,))
+    event_row = cursor.fetchone()
+    event_start = datetime.strptime(f"{event_row['eventDate']} {event_row['startTime']}", "%Y-%m-%d %H:%M")
+
+    # Determine attendance status based on grace period
+    grace_period_minutes = 10
+    late_cutoff = event_start + timedelta(minutes=grace_period_minutes)
+
+    status = "Attended Late" if checkin_time > late_cutoff else "Attended"
+
+    # Insert initial attendance status
+    cursor.execute('''
+        INSERT INTO attendance_status (checkinID, attendanceStatus)
+        VALUES (?, ?)
+    ''', (checkin_id, status))
+
     conn.commit()
     conn.close()
 
@@ -609,6 +675,60 @@ def find_student():
             conn.close()
 
     return render_template('find_student.html', students=students)
+
+def evaluate_all_attendance():
+    print("🔄 Running automated attendance evaluation...")
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        SELECT sc.checkinID, sc.email, sc.endLocation,
+               e.eventDate, e.stopTime, e.latitude, e.longitude,
+               atd.attendanceStatus
+        FROM student_checkins sc
+        JOIN events e ON sc.scannedEventID = e.eventID
+        JOIN attendance_status atd ON sc.checkinID = atd.checkinID
+    ''')
+
+    rows = cursor.fetchall()
+    now = datetime.now()
+
+    for row in rows:
+        checkin_id = row['checkinID']
+        email = row['email']
+        current_status = row['attendanceStatus']
+        end_location = row['endLocation']
+
+        event_end = datetime.strptime(f"{row['eventDate']} {row['stopTime']}", "%Y-%m-%d %H:%M")
+        event_lat = row['latitude']
+        event_lon = row['longitude']
+
+        # Only evaluate after the event has ended
+        if now < event_end:
+            continue
+
+        # Determine if end location is valid
+        end_valid = False
+        if end_location:
+            try:
+                end_lat, end_lon = map(float, end_location.split(','))
+                distance = geodesic((end_lat, end_lon), (event_lat, event_lon)).meters
+                end_valid = distance <= 50
+            except:
+                end_valid = False
+
+        # Downgrade to "Left Early" only if end_location missing or invalid
+        if not end_valid and current_status != "Left Early":
+            cursor.execute('''
+                UPDATE attendance_status
+                SET attendanceStatus = 'Left Early'
+                WHERE checkinID = ?
+            ''', (checkin_id,))
+            print(f"⬇️ Marked {email} as Left Early")
+
+    conn.commit()
+    conn.close()
 
 if __name__ == "__main__":
     app.run(debug=True)
