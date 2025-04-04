@@ -572,7 +572,7 @@ def submit_event():
         hour, minute = map(int, stop_time.split(":"))
         executetime = datetime(year, month, day, hour, minute) + timedelta(minutes=5)
 
-        # 🔁 FIXED: BackgroundScheduler doesn't use .once(), we use add_job instead
+        # FIXED: BackgroundScheduler doesn't use .once(), we use add_job instead
         schedule.add_job(send_professor_emails, 'date', run_date=executetime, args=[event_id])
     except Exception as e:
         print(f"Failed to schedule email job: {e}")
