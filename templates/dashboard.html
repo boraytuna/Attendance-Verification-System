@@ -1,5 +1,174 @@
 {% extends 'base.html' %}
-
 {% block content %}
-    <h1>Welcome to the Dashboard</h1>
+
+<style>
+    body {
+        font-family: 'Segoe UI', sans-serif;
+        margin: 30px;
+        background-color: #f5f6f7;
+        color: #333;
+    }
+
+    h1, h2 {
+        text-align: center;
+        color: #0056b3;
+        margin-bottom: 20px;
+    }
+
+    .dashboard-container {
+        max-width: 1000px;
+        margin: auto;
+        background-color: #ffffff;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+        background-color: #fff;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    th, td {
+        padding: 14px 18px;
+        border-bottom: 1px solid #ddd;
+        text-align: center;
+    }
+
+    th {
+        background-color: #0056b3;
+        color: white;
+    }
+
+    tr:nth-child(even) {
+        background-color: #f2f2f2;
+    }
+
+    .qr-buttons button {
+        background-color: #28a745;
+        color: white;
+        border: none;
+        padding: 8px 12px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background-color 0.2s;
+    }
+
+    .qr-buttons button:hover {
+        background-color: #218838;
+    }
+
+    .no-events {
+        text-align: center;
+        margin-top: 40px;
+        font-style: italic;
+        color: #777;
+    }
+</style>
+
+<div class="dashboard-container">
+    <h1>📊 Dashboard</h1>
+
+    {% if request.args.get('success') == '1' %}
+    <div id="success-message"
+         style="background-color: #d4edda; color: #155724; padding: 10px; border: 1px solid #c3e6cb; border-radius: 5px; margin-bottom: 20px; position: relative;">
+        ✅ Event was successfully created!
+        <button onclick="document.getElementById('success-message').style.display='none'"
+                style="position: absolute; top: 5px; right: 10px; background: none; border: none; font-weight: bold; font-size: 16px; color: #155724; cursor: pointer;">×</button>
+    </div>
+    <script>
+        setTimeout(function () {
+            var msg = document.getElementById('success-message');
+            if (msg) msg.style.display = 'none';
+        }, 3000);
+    </script>
+    {% endif %}
+
+    <h2>📅 Upcoming Events</h2>
+    {% if upcoming_events %}
+    <table>
+        <thead>
+        <tr>
+            <th>Event Name</th>
+            <th>Date</th>
+            <th>Start Time</th>
+            <th>Location</th>
+            <th>QR Code</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for event in upcoming_events %}
+        <tr>
+            <td>{{ event['eventName'] }}</td>
+            <td>{{ event['eventDate'] }}</td>
+            <td>{{ event['startTime'] }}</td>
+            <td>
+                {% if event['place_name'] and event['building'] %}
+                    {{ event['place_name'] }}, {{ event['building'] }}
+                {% else %}
+                    {{ event['eventAddress'] or event['latitude'] ~ ", " ~ event['longitude'] }}
+                {% endif %}
+            </td>
+            <td>
+                <div class="qr-buttons">
+                    <a href="/qr_code/{{ event['eventID'] }}">
+                        <button>View QR Code</button>
+                    </a>
+                </div>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="no-events">No upcoming events.</p>
+    {% endif %}
+
+    <h2>📜 Past Events</h2>
+    {% if past_events %}
+    <table>
+        <thead>
+        <tr>
+            <th>Event Name</th>
+            <th>Date</th>
+            <th>Start Time</th>
+            <th>Location</th>
+            <th>QR Code</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for event in past_events %}
+        <tr>
+            <td>{{ event['eventName'] }}</td>
+            <td>{{ event['eventDate'] }}</td>
+            <td>{{ event['startTime'] }}</td>
+            <td>
+                {% if event['place_name'] and event['building'] %}
+                    {{ event['place_name'] }}, {{ event['building'] }}
+                {% else %}
+                    {{ event['eventAddress'] or event['latitude'] ~ ", " ~ event['longitude'] }}
+                {% endif %}
+            </td>
+            <td>
+                <div class="qr-buttons">
+                    <a href="/qr_code/{{ event['eventID'] }}">
+                        <button>View QR Code</button>
+                    </a>
+                </div>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="no-events">No past events.</p>
+    {% endif %}
+</div>
+
 {% endblock %}
