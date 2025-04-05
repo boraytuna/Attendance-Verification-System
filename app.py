@@ -6,8 +6,7 @@ import segno
 import random
 from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
-import time
-import threading
+
 
 from geopy.distance import geodesic
 
@@ -21,13 +20,6 @@ app.secret_key = os.urandom(24)
 
 #scheduler for scheduling professor attendance emails
 schedule = BackgroundScheduler()
-
-#Done by Olu same while loop upated for new import
-def my_job():
-    evaluate_all_attendance()
-
-schedule = BackgroundScheduler()
-schedule.add_job(my_job, 'interval', seconds=30)
 schedule.start()
 
 
@@ -301,28 +293,6 @@ def search_professors():
     results = cursor.fetchall()
     conn.close()
     return jsonify([row[0] for row in results])
-
-# **API Routes for Submitting Student Check-In Form**
-# @app.route('/submit_student_checkin', methods=['POST'])
-# def submit_student_checkin():
-#     data = request.json
-#     firstName = data['firstName']
-#     lastName = data['lastName']
-#     email = data['email']
-#     classForExtraCredit = data['classForExtraCredit']
-#     professorForExtraCredit = data['professorForExtraCredit']
-#     scannedEventID = int(data['scannedEventID'])
-#     studentLocation = str(data['studentLocation'])
-#
-#     conn = get_db_connection()
-#     conn.cursor().execute('''
-#         INSERT INTO student_checkins (firstName, lastName, email, classForExtraCredit, professorForExtraCredit, scannedEventID, studentLocation)
-#         VALUES (?, ?, ?, ?, ?, ?, ?)''',
-#         (firstName, lastName, email, classForExtraCredit, professorForExtraCredit, scannedEventID, studentLocation))
-#     conn.commit()
-#     conn.close()
-#
-#     return jsonify({'status': 'success'})
 
 @app.route('/submit_student_checkin', methods=['POST'])
 def submit_student_checkin():
