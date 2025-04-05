@@ -15,14 +15,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const allFrames = document.getElementsByTagName("section");
 
-    function getCurrentFrame() {
-        for (let i = 0; i < allFrames.length; i++) {
-            if (allFrames[i].style.display !== "none") {
-                return i;
-            }
-        }
-    }
-
     function showFrame(frameIndex) {
         for (let i = 0; i < allFrames.length; i++) {
             allFrames[i].style.display = i === frameIndex ? "block" : "none";
@@ -71,11 +63,9 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     }
 
-    const restored = JSON.parse(sessionStorage.getItem("studentFormData"));
-    if (restored) {
-        cachedStudent.email = restored.email;
-        cachedStudent.lastName = restored.lastName;
-        cachedStudent.scannedEventID = window.location.pathname.split('/')[2];
+    const restoredCache = JSON.parse(sessionStorage.getItem("cachedStudent"));
+    if (restoredCache) {
+        cachedStudent = restoredCache;
     }
 
     function handleGeolocationError(error) {
@@ -93,7 +83,7 @@ document.addEventListener("DOMContentLoaded", function () {
             default:
                 message = "An unknown error occurred while retrieving location.";
         }
-        alert(`Error (${error.code}): ${message}`);
+        showError(`📍 Location Error (${error.code}): ${message}`);
     }
 
     document.getElementById("btnSubmitFrame1").addEventListener("click", function (e) {
@@ -232,6 +222,7 @@ document.addEventListener("DOMContentLoaded", function () {
             professorForExtraCredit: document.getElementById("professorName").value,
             scannedEventID: cachedStudent.scannedEventID,
             studentLocation: capturedStudentLocation,
+            deviceId: getDeviceId()
         };
 
         fetch('/submit_student_checkin', {
@@ -243,15 +234,15 @@ document.addEventListener("DOMContentLoaded", function () {
         .then(data => {
             if (data.status === "success") {
                 alert("Check-in successful!");
-                sessionStorage.removeItem("currentFrame");
-                sessionStorage.removeItem("studentFormData");
-                showFrame(3);
+                sessionStorage.setItem("cachedStudent", JSON.stringify(cachedStudent));
+                showFrame(3); // Keep session alive until end location is done
             } else {
-                alert("Check-in failed. Please try again.");
+                const reason = data.message || "Check-in failed. Please try again.";
+                alert(`❌ Check-in failed:\n${reason}`);
             }
         })
         .catch(error => {
-            console.error("Error:", error);
+            console.error("Check-in error:", error);
             alert("Network or server error. Try again later.");
         });
     }
@@ -297,6 +288,7 @@ document.addEventListener("DOMContentLoaded", function () {
                             alert("End location successfully submitted!");
                             sessionStorage.removeItem("currentFrame");
                             sessionStorage.removeItem("studentFormData");
+                            sessionStorage.removeItem("cachedStudent");
                             showFrame(4);
                         } else {
                             alert("Something went wrong submitting your final location.");
@@ -317,4 +309,23 @@ document.addEventListener("DOMContentLoaded", function () {
             alert("Geolocation is not supported by your browser.");
         }
     });
+
+    function getDeviceId() {
+        let deviceId = localStorage.getItem("device_id");
+        if (!deviceId) {
+            deviceId = crypto.randomUUID();
+            localStorage.setItem("device_id", deviceId);
+        }
+        return deviceId;
+    }
+
+    function showError(message) {
+        const errorBox = document.getElementById("errorMessage");
+        errorBox.innerText = message;
+        errorBox.style.display = "block";
+    }
+
+    setTimeout(() => {
+        errorBox.style.display = "none";
+    }, 6000);
 });

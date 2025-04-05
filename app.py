@@ -22,6 +22,7 @@ app.secret_key = os.urandom(24)
 schedule = BackgroundScheduler()
 schedule.start()
 
+ENFORCE_DEVICE_ID = True  # Can toggle off for testing or relaxed events
 
 #mail server configuration
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
@@ -73,7 +74,7 @@ def create_tables():
 
     # Create Student Check-Ins Table
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS student_checkins (
+        CREATE TABLE IF NOT EXISTS student_checkins(
             checkinID INTEGER PRIMARY KEY AUTOINCREMENT,
             firstName TEXT NOT NULL,
             lastName TEXT NOT NULL,
@@ -294,6 +295,8 @@ def search_professors():
     conn.close()
     return jsonify([row[0] for row in results])
 
+ENFORCE_DEVICE_ID = True  # You can toggle this off to disable device restriction
+
 @app.route('/submit_student_checkin', methods=['POST'])
 def submit_student_checkin():
     data = request.json
@@ -304,19 +307,33 @@ def submit_student_checkin():
     professorForExtraCredit = data['professorForExtraCredit']
     scannedEventID = int(data['scannedEventID'])
     studentLocation = str(data['studentLocation'])
+    deviceId = data.get('deviceId')  # New field from frontend
 
     conn = get_db_connection()
     cursor = conn.cursor()
+
+    # ✅ Device restriction check (optional)
+    if ENFORCE_DEVICE_ID:
+        cursor.execute('''
+            SELECT 1 FROM student_checkins
+            WHERE scannedEventID = ? AND deviceId = ?
+        ''', (scannedEventID, deviceId))
+        if cursor.fetchone():
+            conn.close()
+            return jsonify({
+                'status': 'error',
+                'message': 'This device has already been used to check in for this event.'
+            })
 
     # Insert student check-in
     cursor.execute('''
         INSERT INTO student_checkins (
             firstName, lastName, email, classForExtraCredit,
-            professorForExtraCredit, scannedEventID, studentLocation
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            professorForExtraCredit, scannedEventID, studentLocation, deviceId
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         firstName, lastName, email, classForExtraCredit,
-        professorForExtraCredit, scannedEventID, studentLocation
+        professorForExtraCredit, scannedEventID, studentLocation, deviceId
     ))
 
     # Get checkinID for this new row
@@ -352,7 +369,6 @@ def submit_student_checkin():
 
     return jsonify({'status': 'success'})
 
-# New Route: To submit end location to the student checkin form
 @app.route('/submit_end_location', methods=['POST'])
 def submit_end_location():
     print("📍 /submit_end_location called")
