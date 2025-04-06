@@ -34,3 +34,16 @@
   - Python libraries did not provide sufficient accuracy or real-time tracking when the phone was locked. JavaScript geolocation is more reliable and familiar to users.
 - #### Implications:
   - Requires careful handling of browser permissions and background states for continuous tracking. Improves precision and user experience for verifying attendance in real time.
+
+
+## [2025-04-06] – Change Summary
+### Changed
+- Refactored attendance verification logic: moved decision-making from backend to professors.
+- Removed hardcoded attendance status labels (e.g., "Attended", "Late").
+- Professors now receive an email report with:
+  - Student names, emails, check-in/out times
+  - Official event start/end times
+  - Only includes students who checked in and out within 100m of event location.
+### Removed
+- Dropped deprecated `attendance_status` table
+- Cleaned 3 invalid rows from `events` table with missing address and recurrence info.
