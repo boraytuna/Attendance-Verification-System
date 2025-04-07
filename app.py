@@ -619,7 +619,8 @@ def submit_event():
         SELECT * FROM events 
         WHERE eventDate = ? AND startTime = ? AND stopTime = ? 
         AND ROUND(latitude, 6) = ROUND(?, 6) AND ROUND(longitude, 6) = ROUND(?, 6)
-    """, (event_date, start_time, stop_time, lat, lng))
+        AND ((? BETWEEN startTime AND stopTime) OR (? BETWEEN startTime AND stopTime) OR (startTime BETWEEN ? AND ?))
+     """, (event_date, start_time, stop_time, lat, lng))
     same_time_place = cursor.fetchone()
 
     if same_time_place:

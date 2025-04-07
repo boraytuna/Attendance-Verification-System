@@ -92,6 +92,19 @@
                     if (data.success) {
                         fetchPlaces(); // Refresh table dynamically
                         document.getElementById("placeForm").reset(); // Clear form
+
+                        // ✅ Show success message dynamically
+                        const message = document.createElement("div");
+                        message.className = "flash-message";
+                        message.style = "background-color: #d4edda; color: #155724; padding: 10px; border: 1px solid #c3e6cb; border-radius: 5px; margin: 20px auto; max-width: 600px; display: flex; justify-content: space-between; align-items: center;";
+                        message.innerHTML = `✅ Place was successfully added!
+                        <button onclick="this.parentElement.style.display='none'" style="background: none; border: none; font-weight: bold; cursor: pointer; color: #155724;">✖</button>`;
+
+                        document.body.insertBefore(message, document.body.firstChild);
+
+                        setTimeout(() => {
+                            message.style.display = "none";
+                        }, 4000);
                     } else {
                         alert("Error saving place.");
                     }
