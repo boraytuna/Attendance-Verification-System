@@ -118,3 +118,19 @@ button {
     border-radius: .25rem;
     border: 1px solid #2F88FF;
 }
+
+table, th, td {
+    border: 1px solid black;
+    border-collapse: collapse;
+    padding: 0.5rem;
+    text-align: center;
+    font-size: 1rem;
+    line-height: 1.2rem;
+    margin-left: 5%;
+}
+
+table, td:last-child, th:last-child {
+    border-right: none;
+    border-top: none;
+    border-bottom: none;
+}
