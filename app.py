@@ -58,16 +58,17 @@ def create_tables():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # # Create Events Table
+    # Create Events Table
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS events(
+        CREATE TABLE IF NOT EXISTS events (
             eventID INTEGER PRIMARY KEY AUTOINCREMENT,
             eventName TEXT NOT NULL,
             eventDate DATE NOT NULL,
             startTime TIME NOT NULL,
             stopTime TIME NOT NULL,
             latitude REAL NOT NULL,
-            longitude REAL NOT NULL
+            longitude REAL NOT NULL,
+            eventAddress TEXT NOT NULL
         )
     ''')
 
@@ -75,6 +76,7 @@ def create_tables():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS student_checkins(
             checkinID INTEGER PRIMARY KEY AUTOINCREMENT,
+            deviceId TEXT NOT NULL,
             firstName TEXT NOT NULL,
             lastName TEXT NOT NULL,
             email TEXT NOT NULL,
@@ -340,13 +342,7 @@ def submit_student_checkin():
     late_cutoff = event_start + timedelta(minutes=grace_period_minutes)
 
     status = "Attended Late" if checkin_time > late_cutoff else "Attended"
-
-    # Insert initial attendance status
-    cursor.execute('''
-        INSERT INTO attendance_status (checkinID, attendanceStatus)
-        VALUES (?, ?)
-    ''', (checkin_id, status))
-
+    
     conn.commit()
     conn.close()
 
@@ -819,10 +815,6 @@ def test_location_accuracy(event_id):
         output.append(result_line)
 
     return Response("".join(output), mimetype='text/html')
-
-@app.route("/test")
-def test():
-    return render_template("temp.html")
 
 if __name__ == "__main__":
     scheduler.start()
