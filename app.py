@@ -8,6 +8,7 @@ import math
 from datetime import datetime, timedelta
 from geopy.distance import geodesic
 from apscheduler.schedulers.background import BackgroundScheduler
+import auth
 
 app = Flask(__name__)
 
@@ -63,6 +64,7 @@ def create_tables():
         CREATE TABLE IF NOT EXISTS users (
             userID INTEGER PRIMARY KEY AUTOINCREMENT,
             userEmail TEXT NOT NULL
+        )
     ''')
 
     # Create Events Table
@@ -117,15 +119,44 @@ def create_tables():
 create_tables()
 
 @app.route("/")
-def home():
-    return render_template("landing.html")
+def landing_page():
+    """
+    Flask route for the landing page.
+    
+    Returns:
+        the rendered landing page HTML template
+    """
+    return render_template("landing_page.html")
 
 @app.route("/signup")
 def signup():
+    """
+    Flask route for the signup page.
+
+    Returns:
+        the rendered signup page HTML template
+    """
     return render_template("signup.html")
+
+@app.route("/submit_signup", methods=["POST"])
+def submit_signup():
+    """
+    API route to handle user signup.
+    """
+    data = request.json
+    email = data.get('email')
+    password = data.get('password')
+    #hash password
+
 
 @app.route("/login")
 def login():
+    """
+    Flask route for the login page.
+
+    Returns:
+        the rendered login page HTML template
+    """
     return render_template("login.html")
 
 @app.route("/dashboard")
