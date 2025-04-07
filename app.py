@@ -106,6 +106,15 @@ def create_tables():
 
 # Ensure database tables exist
 create_tables()
+
+@app.route('/privacy-policy.html')
+def privacy_policy():
+    return render_template('privacy-policy.html')
+
+@app.route('/user-agreement.html')
+def user_agreement():
+    return render_template('user-agreement.html')
+
 @app.route("/") #Made by olu
 def home():
     return redirect(url_for("dashboard"))
@@ -154,11 +163,6 @@ def events():
 @app.route("/calendar")
 def calendar():
     return render_template("calendar.html")
-
-# # Route: Find Student Page
-# @app.route("/find_student")
-# def find_student():
-#     return render_template("find_student.html")
 
 # Route: Places Page
 @app.route("/places")
