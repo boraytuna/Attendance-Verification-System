@@ -770,21 +770,22 @@ def get_places():
 
 @app.route('/find_student', methods=['GET', 'POST'])
 def find_student():
-    students = None  # Ensure we differentiate between no search and empty results
+    students = None
 
     if request.method == 'POST':
         first_name = request.form['first_name'].strip()
         last_name = request.form['last_name'].strip()
 
-        if first_name or last_name:  # Ensure at least one field is filled
+        if first_name or last_name:
             conn = get_db_connection()
             cursor = conn.cursor()
 
             query = '''
-            SELECT * FROM student_checkins 
-            WHERE (firstName LIKE ? OR lastName LIKE ?)
+            SELECT sc.*, e.eventName, e.startTime, e.stopTime
+            FROM student_checkins sc
+            LEFT JOIN events e ON sc.scannedEventID = e.eventID
+            WHERE (sc.firstName LIKE ? OR sc.lastName LIKE ?)
             '''
-
             params = [f'%{first_name}%', f'%{last_name}%']
 
             cursor.execute(query, params)
@@ -792,6 +793,7 @@ def find_student():
             conn.close()
 
     return render_template('find_student.html', students=students)
+
 
 @app.route("/test_email/<int:event_id>")
 def test_send_professor_email(event_id):
