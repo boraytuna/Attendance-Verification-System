@@ -12,6 +12,15 @@
         <div class="calendar-grid" id="calendar"></div>
     </div>
 
+    <!-- Event details section -->
+   <div id="event-details" style="display: none; border: 1px solid #ccc; padding: 15px; margin-top: 20px;">
+      <h3 id="detail-title"></h3>
+       <p><strong>Date:</strong> <span id="detail-date"></span></p>
+       <p><strong>Time:</strong> <span id="detail-time"></span></p>
+       <p><strong>Location:</strong> <span id="detail-location"></span></p>
+   </div>
+
+
     <link rel="stylesheet" href="{{ url_for('static', filename='css/calendar.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 
@@ -54,24 +63,41 @@
 }
 
 
-            function loadEvents() {
-                axios.get("/api/events")
-                    .then(response => {
-                        console.log("Events loaded:", response.data);
-                        const events = response.data;
-                        events.forEach(event => {
-                            const eventDate = event.start.split("T")[0];
-                            const cell = document.querySelector(`[data-date='${eventDate}']`);
-                            if (cell) {
-                                const eventDiv = document.createElement("div");
-                                eventDiv.classList.add("event");
-                                eventDiv.textContent = event.title;
-                                cell.querySelector(".event-list").appendChild(eventDiv);
-                            }
-                        });
-                    })
-                    .catch(error => console.error("Error loading events:", error));
-            }
+function loadEvents() {
+    axios.get("/api/events")
+        .then(response => {
+            console.log("Events loaded:", response.data);
+            const events = response.data;
+            events.forEach(event => {
+                const eventDate = event.start.split("T")[0];
+                const cell = document.querySelector(`[data-date='${eventDate}']`);
+                if (cell) {
+                    const eventDiv = document.createElement("div");
+                    eventDiv.classList.add("event");
+                    eventDiv.textContent = event.title;
+
+                    // Store full event data as dataset
+                    eventDiv.dataset.title = event.title;
+                    eventDiv.dataset.date = event.start.split("T")[0];
+                    eventDiv.dataset.time = event.start.split("T")[1]?.slice(0,5) || "TBD";
+                    eventDiv.dataset.location = event.location || "Not specified";
+
+                    // Add click listener
+                    eventDiv.addEventListener("click", function (e) {
+                        document.getElementById("detail-title").textContent = this.dataset.title;
+                        document.getElementById("detail-date").textContent = this.dataset.date;
+                        document.getElementById("detail-time").textContent = this.dataset.time;
+                        document.getElementById("detail-location").textContent = this.dataset.location;
+                        document.getElementById("event-details").style.display = "block";
+                    });
+
+                    cell.querySelector(".event-list").appendChild(eventDiv);
+                }
+            });
+        })
+        .catch(error => console.error("Error loading events:", error));
+}
+
 
             prevMonthBtn.addEventListener("click", function () {
                 currentDate.setMonth(currentDate.getMonth() - 1);

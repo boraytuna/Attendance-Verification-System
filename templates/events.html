@@ -248,6 +248,16 @@
             <div id="map"></div>
         </div>
 
+         
+        <label for="recurrence">Recurrence:</label>
+        <select id="recurrence" name="recurrence">
+             <option value="none">None</option>
+             <option value="daily">Daily</option>
+             <option value="weekly">Weekly</option>
+             <option value="monthly">Monthly</option>
+        </select>
+
+
         <p id="location_error" style="color: red; display: none;">⚠️ Please select a location before submitting.</p>
 
         <button type="submit" onclick="validateLocation(event)">Create Event</button>

@@ -5,8 +5,8 @@ import os
 import segno
 import requests
 import random
-from datetime import datetime
-import schedule
+from datetime import datetime, timedelta
+
 import time
 from threading import Thread
 
@@ -383,6 +383,13 @@ def submit_event():
     stop_time = request.form["stop_time"]
     event_location = request.form["event_location"]
     event_address = request.form.get("event_address", "Unknown Location")
+    recurrence = request.form.get("recurrence", "none")
+
+    
+
+
+     # Convert date to datetime object
+    event_date_obj = datetime.strptime(event_date, "%Y-%m-%d")
     
     try:
         lat, lng = map(float, event_location.split(","))
@@ -397,6 +404,31 @@ def submit_event():
         VALUES (?, ?, ?, ?, ?, ?, ?)
     ''', (event_name, event_date, start_time, stop_time, lat, lng, event_address))
 
+     # Generate recurring dates
+    occurrences = [event_date_obj]
+    if recurrence in ["daily", "weekly", "monthly"]:
+        for i in range(1, 10):  # generate 10 future occurrences
+            if recurrence == "daily":
+                occurrences.append(event_date_obj + timedelta(days=i))
+            elif recurrence == "weekly":
+                occurrences.append(event_date_obj + timedelta(weeks=i))
+            elif recurrence == "monthly":
+                next_month = event_date_obj.month + i
+                year = event_date_obj.year + (next_month - 1) // 12
+                month = (next_month - 1) % 12 + 1
+                try:
+                    occurrences.append(event_date_obj.replace(year=year, month=month))
+                except ValueError:
+                    # skip invalid dates like February 30th
+                    continue
+
+    for date in occurrences[1:]:
+        cursor.execute('''
+            INSERT INTO events (eventName, eventDate, startTime, stopTime, latitude, longitude, eventAddress)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (event_name, date.strftime("%Y-%m-%d"), start_time, stop_time, lat, lng, event_address))
+
+
     event_id = cursor.lastrowid
     conn.commit()
     conn.close()
@@ -410,18 +442,24 @@ def submit_event():
 def get_events():
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT eventID, eventName, eventDate, startTime, stopTime, latitude, longitude, eventAddress FROM events")
-    events = cursor.fetchall()
+    cursor.execute("""
+        SELECT eventID, eventName, eventDate, startTime, stopTime,
+               latitude, longitude, eventAddress, isRecurring, recurrenceInterval
+        FROM events
+    """)
+    fetch_events = cursor.fetchall()
     conn.close()
+
     formatted_events = []
-    for event in events:
-        # Convert to dictionary (assuming events is a list of tuples)
+
+    for event in fetch_events:
         event_dict = dict(event)
 
-        # Combine date and time for FullCalendar's required format
+        # Base datetime
         start_datetime = f"{event_dict['eventDate']}T{event_dict['startTime']}"
         end_datetime = f"{event_dict['eventDate']}T{event_dict['stopTime']}" if event_dict["stopTime"] else None
 
+        # Add original event
         formatted_events.append({
             "id": event_dict["eventID"],
             "title": event_dict["eventName"],
@@ -432,7 +470,34 @@ def get_events():
             "longitude": event_dict["longitude"]
         })
 
+        # Handle recurrence
+        if event_dict.get("isRecurring"):
+            recurrence_days = event_dict["recurrenceInterval"]
+            current_date = datetime.strptime(event_dict["eventDate"], "%Y-%m-%d").date()
+            event_time = datetime.strptime(event_dict["startTime"], "%H:%M:%S").time()
+
+            # Let's repeat it 5 more times (example)
+            for i in range(1, 6):
+                recur_date = current_date + timedelta(days=i * recurrence_days)
+                recur_start = datetime.combine(recur_date, event_time).isoformat()
+
+                recur_end = None
+                if event_dict["stopTime"]:
+                    stop_time = datetime.strptime(event_dict["stopTime"], "%H:%M:%S").time()
+                    recur_end = datetime.combine(recur_date, stop_time).isoformat()
+
+                formatted_events.append({
+                    "id": f"{event_dict['eventID']}_r{i}",
+                    "title": f"{event_dict['eventName']} (Recurring)",
+                    "start": recur_start,
+                    "end": recur_end,
+                    "location": event_dict["eventAddress"],
+                    "latitude": event_dict["latitude"],
+                    "longitude": event_dict["longitude"]
+                })
+
     return jsonify(formatted_events)
+
 
 @app.route("/submit_place", methods=["POST"])
 def submit_place():
