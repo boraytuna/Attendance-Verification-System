@@ -58,6 +58,13 @@ def create_tables():
     conn = get_db_connection()
     cursor = conn.cursor()
 
+    # Create Users Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            userID INTEGER PRIMARY KEY AUTOINCREMENT,
+            userEmail TEXT NOT NULL
+    ''')
+
     # Create Events Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS events (
@@ -108,9 +115,18 @@ def create_tables():
 
 # Ensure database tables exist
 create_tables()
-@app.route("/") #Made by olu
+
+@app.route("/")
 def home():
-    return redirect(url_for("dashboard"))
+    return render_template("landing.html")
+
+@app.route("/signup")
+def signup():
+    return render_template("signup.html")
+
+@app.route("/login")
+def login():
+    return render_template("login.html")
 
 @app.route("/dashboard")
 def dashboard():
