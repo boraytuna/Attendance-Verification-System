@@ -20,48 +20,89 @@ document.addEventListener("DOMContentLoaded", function () {
             allFrames[i].style.display = i === frameIndex ? "block" : "none";
         }
         currentFrameIndex = frameIndex;
+
+        // 🌟 Only restore form data when Frame 0 is shown
+        if (frameIndex === 0) {
+            restoreFormData();
+        }
     }
 
     const savedFrame = parseInt(sessionStorage.getItem("currentFrame"));
     if (!isNaN(savedFrame)) {
         showFrame(savedFrame);
-        restoreFormData();
     } else {
         showFrame(0);
     }
 
-    ["firstName", "lastName", "studentEmail", "className", "professorName"].forEach(id => {
-        const el = document.getElementById(id);
+    function saveFormData() {
+        let rows = document.querySelectorAll("#tableBody tr:not(#tableHeader)");
+        let courseTable = [];
+
+        rows.forEach(row => {
+            let cells = row.querySelectorAll("td");
+            if (cells.length >= 2) {
+                courseTable.push({
+                    className: cells[0].innerText.trim(),
+                    professorName: cells[1].innerText.trim()
+                });
+            }
+        });
+
+        const formData = {
+            firstName: document.getElementById("firstName").value,
+            lastName: document.getElementById("lastName").value,
+            email: document.getElementById("studentEmail").value,
+            courseTable: courseTable // ⬅️ Add this
+        };
+
+        sessionStorage.setItem("studentFormData", JSON.stringify(formData));
+    }
+
+    ["firstName", "lastName", "studentEmail"].forEach(id => {
+    const el = document.getElementById(id);
         if (el) {
             el.addEventListener("input", saveFormData);
         }
     });
 
-    function saveFormData() {
-        const formData = {
-            firstName: document.getElementById("firstName").value,
-            lastName: document.getElementById("lastName").value,
-            email: document.getElementById("studentEmail").value,
-            className: document.getElementById("className")?.value || "",
-            professorName: document.getElementById("professorName")?.value || ""
-        };
-        sessionStorage.setItem("studentFormData", JSON.stringify(formData));
-    }
-
     function restoreFormData() {
         const formData = JSON.parse(sessionStorage.getItem("studentFormData"));
-        if (formData) {
-            document.getElementById("firstName").value = formData.firstName || "";
-            document.getElementById("lastName").value = formData.lastName || "";
-            document.getElementById("studentEmail").value = formData.email || "";
-            if (document.getElementById("className")) {
-                document.getElementById("className").value = formData.className || "";
-            }
-            if (document.getElementById("professorName")) {
-                document.getElementById("professorName").value = formData.professorName || "";
-            }
+        if (!formData) return;
+
+        document.getElementById("firstName").value = formData.firstName || "";
+        document.getElementById("lastName").value = formData.lastName || "";
+        document.getElementById("studentEmail").value = formData.email || "";
+
+        if (Array.isArray(formData.courseTable)) {
+            formData.courseTable.forEach(entry => {
+                let newRow = document.createElement("tr");
+                newRow.setAttribute("id", "tableRow");
+
+                let courseCell = document.createElement("td");
+                courseCell.innerText = entry.className;
+                newRow.appendChild(courseCell);
+
+                let profCell = document.createElement("td");
+                profCell.innerText = entry.professorName;
+                newRow.appendChild(profCell);
+
+                let deleteCell = document.createElement("td");
+                let icon = document.createElement("i");
+                icon.classList.add("fa-solid", "fa-trash-can");
+                icon.setAttribute("style", "cursor: pointer; color: red;");
+                deleteCell.appendChild(icon);
+                newRow.appendChild(deleteCell);
+
+                icon.addEventListener("click", function () {
+                    newRow.remove();
+                    saveFormData();
+                });
+
+                table.appendChild(newRow);
+            });
         }
     }
+
 
     const restoredCache = JSON.parse(sessionStorage.getItem("cachedStudent"));
     if (restoredCache) {
@@ -214,15 +255,27 @@ document.addEventListener("DOMContentLoaded", function () {
     btnAllowLocation.addEventListener("click", getLocationAndSubmit);
 
     function submitStudentCheckin(capturedStudentLocation) {
+        let rows = document.querySelectorAll("#tableBody tr:not(#tableHeader)");
+        let courseData = [];
+
+        rows.forEach(row => {
+            let cells = row.querySelectorAll("td");
+            if (cells.length >= 2) {
+                courseData.push({
+                    className: cells[0].innerText.trim(),
+                    professorName: cells[1].innerText.trim()
+                });
+            }
+        });
+
         let formData = {
             firstName: document.getElementById("firstName").value,
             lastName: cachedStudent.lastName,
             email: cachedStudent.email,
-            classForExtraCredit: document.getElementById("className").value,
-            professorForExtraCredit: document.getElementById("professorName").value,
             scannedEventID: cachedStudent.scannedEventID,
             studentLocation: capturedStudentLocation,
-            deviceId: getDeviceId()
+            deviceId: getDeviceId(),
+            courses: courseData // Send the full list
         };
 
         fetch('/submit_student_checkin', {
@@ -235,15 +288,15 @@ document.addEventListener("DOMContentLoaded", function () {
             if (data.status === "success") {
                 alert("Check-in successful!");
                 sessionStorage.setItem("cachedStudent", JSON.stringify(cachedStudent));
-                showFrame(3); // Keep session alive until end location is done
+                showFrame(3);
             } else {
                 const reason = data.message || "Check-in failed. Please try again.";
                 alert(`❌ Check-in failed:\n${reason}`);
             }
         })
         .catch(error => {
-            console.error("Check-in error:", error);
-            alert("Network or server error. Try again later.");
+            console.error("🚨 Fetch failed:", error);
+            alert("Network or server error:\n" + error.message);
         });
     }
 
@@ -295,7 +348,7 @@ document.addEventListener("DOMContentLoaded", function () {
                         }
                     })
                     .catch(error => {
-                        console.error("Fetch error:", error);
+                        console.error("🚨 Fetch failed:", error);
                         alert("Network error while submitting location.");
                     });
                 },
@@ -331,24 +384,18 @@ document.addEventListener("DOMContentLoaded", function () {
 
     function createNewTableRow() {
         try {
-            //create new table row, append to table
             let newTableRow = document.createElement("tr");
             table.appendChild(newTableRow);
             newTableRow.setAttribute("id", "tableRow");
 
-            //create Course Name cell in new row, append to new row
             let newCourseCell = document.createElement("td");
-            newTableRow.append(newCourseCell);
-            //set the inner text of the cell to the value of the className input field
             newCourseCell.innerText = document.getElementById("className").value;
+            newTableRow.appendChild(newCourseCell);
 
-            //create Professor Name cell in new row, append to new row
             let newProfessorCell = document.createElement("td");
-            newTableRow.appendChild(newProfessorCell);
-            //set the inner text of the cell to the value of the professorName input field
             newProfessorCell.innerText = document.getElementById("professorName").value;
+            newTableRow.appendChild(newProfessorCell);
 
-            //delete icon
             let newDeleteCell = document.createElement("td");
             let icon = document.createElement("i");
             icon.classList.add("fa-solid", "fa-trash-can");
@@ -356,11 +403,12 @@ document.addEventListener("DOMContentLoaded", function () {
             newDeleteCell.appendChild(icon);
             newTableRow.appendChild(newDeleteCell);
 
-            //remove row when delete icon clicked
             icon.addEventListener("click", function () {
                 newTableRow.remove();
+                saveFormData(); // ✅ Save after deletion
             });
 
+            saveFormData(); // ✅ Save after addition
             return true;
         } catch (error) {
             return false;

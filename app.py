@@ -21,9 +21,6 @@ app.secret_key = os.urandom(24)
 scheduler = BackgroundScheduler()
 
 
-
-ENFORCE_DEVICE_ID = True  # Can toggle off for testing or relaxed events
-
 #mail server configuration
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
@@ -38,6 +35,8 @@ if not os.path.exists(QR_CODE_FOLDER):
     os.makedirs(QR_CODE_FOLDER)
 
 GOOGLE_API_KEY = "AIzaSyAzf_3rNo5yi24L3Mu35o5VHaw1PwVmeTs"  # Replace with your actual Google API key
+
+ENFORCE_DEVICE_ID = False  # You can toggle this off to disable device restriction (false means it doesnt wait)
 
 # Function to connect to SQLite
 def get_db_connection():
@@ -113,6 +112,15 @@ def create_tables():
 
 # Ensure database tables exist
 create_tables()
+
+@app.route('/privacy-policy.html')
+def privacy_policy():
+    return render_template('privacy-policy.html')
+
+@app.route('/user-agreement.html')
+def user_agreement():
+    return render_template('user-agreement.html')
+
 @app.route("/") #Made by olu
 def home():
     return redirect(url_for("dashboard"))
@@ -161,11 +169,6 @@ def events():
 @app.route("/calendar")
 def calendar():
     return render_template("calendar.html")
-
-# # Route: Find Student Page
-# @app.route("/find_student")
-# def find_student():
-#     return render_template("find_student.html")
 
 # Route: Places Page
 @app.route("/places")
@@ -285,24 +288,21 @@ def search_professors():
     conn.close()
     return jsonify([row[0] for row in results])
 
-ENFORCE_DEVICE_ID = True  # You can toggle this off to disable device restriction
-
 @app.route('/submit_student_checkin', methods=['POST'])
 def submit_student_checkin():
     data = request.json
     firstName = data['firstName']
     lastName = data['lastName']
     email = data['email']
-    classForExtraCredit = data['classForExtraCredit']
-    professorForExtraCredit = data['professorForExtraCredit']
     scannedEventID = int(data['scannedEventID'])
     studentLocation = str(data['studentLocation'])
-    deviceId = data.get('deviceId')  # New field from frontend
+    deviceId = data.get('deviceId')
+    course_entries = data.get('courses', [])  # Expecting list of {className, professorName}
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # ✅ Device restriction check (optional)
+    # ✅ Optional device restriction
     if ENFORCE_DEVICE_ID:
         cursor.execute('''
             SELECT 1 FROM student_checkins
@@ -315,67 +315,92 @@ def submit_student_checkin():
                 'message': 'This device has already been used to check in for this event.'
             })
 
-    # Insert student check-in
-    cursor.execute('''
-        INSERT INTO student_checkins (
-            firstName, lastName, email, classForExtraCredit,
-            professorForExtraCredit, scannedEventID, studentLocation, deviceId
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (
-        firstName, lastName, email, classForExtraCredit,
-        professorForExtraCredit, scannedEventID, studentLocation, deviceId
-    ))
-
-    # Get checkinID for this new row
-    cursor.execute('''
-        SELECT checkinID, checkinTime FROM student_checkins
-        WHERE email = ? AND scannedEventID = ? AND lastName = ?
-        ORDER BY checkinTime DESC LIMIT 1
-    ''', (email, scannedEventID, lastName))
-    result = cursor.fetchone()
-
-    checkin_id = result["checkinID"]
-    checkin_time = datetime.strptime(result["checkinTime"], "%Y-%m-%d %H:%M:%S")
-
-    # Fetch event start time
+    # Fetch event start time once for timing logic
     cursor.execute('SELECT eventDate, startTime FROM events WHERE eventID = ?', (scannedEventID,))
     event_row = cursor.fetchone()
-    event_start = datetime.strptime(f"{event_row['eventDate']} {event_row['startTime']}", "%Y-%m-%d %H:%M")
+    if not event_row:
+        conn.close()
+        return jsonify({'status': 'error', 'message': 'Event not found'}), 404
 
-    # Determine attendance status based on grace period
+    event_start = datetime.strptime(f"{event_row['eventDate']} {event_row['startTime']}", "%Y-%m-%d %H:%M")
     grace_period_minutes = 10
     late_cutoff = event_start + timedelta(minutes=grace_period_minutes)
 
-    status = "Attended Late" if checkin_time > late_cutoff else "Attended"
-    
+    responses = []
+
+    for entry in course_entries:
+        className = entry.get('className')
+        professorName = entry.get('professorName')
+
+        if not className or not professorName:
+            continue  # skip if data is missing
+
+        # Insert student check-in
+        cursor.execute('''
+            INSERT INTO student_checkins (
+                firstName, lastName, email, classForExtraCredit,
+                professorForExtraCredit, scannedEventID, studentLocation, deviceId
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            firstName, lastName, email, className,
+            professorName, scannedEventID, studentLocation, deviceId
+        ))
+
+        # Fetch latest check-in row to get timestamp
+        cursor.execute('''
+            SELECT checkinID, checkinTime FROM student_checkins
+            WHERE email = ? AND scannedEventID = ? AND lastName = ?
+            AND classForExtraCredit = ? AND professorForExtraCredit = ?
+            ORDER BY checkinTime DESC LIMIT 1
+        ''', (email, scannedEventID, lastName, className, professorName))
+        result = cursor.fetchone()
+
+        if result:
+            checkin_time = datetime.strptime(result["checkinTime"], "%Y-%m-%d %H:%M:%S")
+            status = "Attended Late" if checkin_time > late_cutoff else "Attended"
+            responses.append({
+                "class": className,
+                "professor": professorName,
+                "status": status
+            })
+
     conn.commit()
     conn.close()
 
-    return jsonify({'status': 'success'})
+    return jsonify({'status': 'success', 'entries': responses})
 
 @app.route('/submit_end_location', methods=['POST'])
 def submit_end_location():
     print("📍 /submit_end_location called")
     data = request.json
-    email = data['email']
-    scannedEventID = int(data['scannedEventID'])
-    endLocation = str(data['endLocation'])
+    email = data.get('email')
+    scannedEventID = int(data.get('scannedEventID'))
+    endLocation = str(data.get('endLocation'))
     endTime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    lastName = data['lastName']
+    lastName = data.get('lastName')
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    cursor.execute('''
-        UPDATE student_checkins
-        SET endLocation = ?, endTime = ?
-        WHERE email = ? AND scannedEventID = ? AND lastName = ?
-    ''', (endLocation, endTime, email, scannedEventID, lastName))
+    try:
+        # 🔁 Update all matching rows that haven't been updated yet
+        cursor.execute('''
+            UPDATE student_checkins
+            SET endLocation = ?, endTime = ?
+            WHERE email = ? AND scannedEventID = ? AND lastName = ?
+              AND (endLocation IS NULL OR endLocation = '')
+        ''', (endLocation, endTime, email, scannedEventID, lastName))
 
-    conn.commit()
-    conn.close()
+        updated_count = cursor.rowcount
+        conn.commit()
+        print(f"✅ Updated {updated_count} rows with end location.")
 
-    return jsonify({'status': 'success'})
+        return jsonify({'status': 'success', 'updated': updated_count})
+    except Exception as e:
+        print(f"❌ Error updating end location: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    finally:
+        conn.close()
 
 # **Functions for Generating and Sending Emails to Professors Post-Event**
 def haversine_distance(lat1, lon1, lat2, lon2):
