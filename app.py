@@ -19,7 +19,7 @@ app.secret_key = os.urandom(24)
 
 #scheduler for scheduling professor attendance emails
 scheduler = BackgroundScheduler()
-scheduler.start()
+
 
 
 ENFORCE_DEVICE_ID = True  # Can toggle off for testing or relaxed events
@@ -71,6 +71,11 @@ def create_tables():
             eventAddress TEXT NOT NULL
         )
     ''')
+    # ✅ Add professor_email_sent column if not exists
+    try:
+        cursor.execute("ALTER TABLE events ADD COLUMN professor_email_sent INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # Ignore if it already exists
 
     # Create Student Check-Ins Table
     cursor.execute('''
