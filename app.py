@@ -622,10 +622,16 @@ def submit_event():
     cursor = conn.cursor()
     cursor.execute("""
         SELECT * FROM events 
-        WHERE eventDate = ? AND startTime = ? AND stopTime = ? 
-        AND ROUND(latitude, 6) = ROUND(?, 6) AND ROUND(longitude, 6) = ROUND(?, 6)
-        AND ((? BETWEEN startTime AND stopTime) OR (? BETWEEN startTime AND stopTime) OR (startTime BETWEEN ? AND ?))
-     """, (event_date, start_time, stop_time, lat, lng))
+        WHERE eventDate = ? 
+        AND ROUND(latitude, 6) = ROUND(?, 6) 
+        AND ROUND(longitude, 6) = ROUND(?, 6)
+        AND (
+            (? BETWEEN startTime AND stopTime) OR 
+            (? BETWEEN startTime AND stopTime) OR 
+            (startTime BETWEEN ? AND ?)
+        )
+    """, (event_date, lat, lng, start_time, stop_time, start_time, stop_time))
+
     same_time_place = cursor.fetchone()
 
     if same_time_place:
