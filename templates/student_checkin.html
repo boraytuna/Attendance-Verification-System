@@ -55,6 +55,7 @@
         <div class="content">
             <h1>Student Attendance Form</h1>
             <form id="studentCheckinForm">
+                <p>Add a list of courses you are attending this event for.</p>
                 <label for="className">Enter class name</label>
                 <input type="text" id="className" name="className" placeholder="Enter class name" list="courseSuggestions">
                 <datalist id="courseSuggestions"></datalist>
@@ -62,6 +63,23 @@
                 <label for="professorName">Enter professor name</label>
                 <input type="text" id="professorName" name="professorName" placeholder="Enter professor name" list="professorSuggestions">
                 <datalist id="professorSuggestions"></datalist>
+
+                <button id="addRowToTable" style="margin-top: 1rem;" disabled>Add</button>
+
+                <table>
+                    <colgroup>
+                        <col style="width: 45%;">
+                        <col style="width: 40%;">
+                        <col style="width: 5%;">
+                    </colgroup>
+                    <tbody id="tableBody">
+                        <tr id="tableHeader">
+                            <th>Course Name</th>
+                            <th>Professor Name</th>
+                            <th></th>
+                        </tr>
+                    </tbody>
+                </table>
 
                 <div class="checkboxContainer">
                     <input type="checkbox" id="userAgreement" name="userAgreement">
@@ -75,7 +93,7 @@
 
                 <!-- Location Permission Section -->
                 <div style="margin-bottom: 1rem;">
-                    <p>We need to track your location to verify attendance.</p>
+                    <p>We need to track your location to verify attendsance.</p>
                     <button type="button" id="btnAllowLocation" disabled>Allow Access</button>
                 </div>
             </form>
@@ -104,7 +122,7 @@
     </section>
 
     <div id="errorMessage" style="display: none; color: white; background: #e63946; padding: 10px; margin: 10px 0; border-radius: 6px;"></div>
-
+</body>
 
 
 

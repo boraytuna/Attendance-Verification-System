@@ -328,4 +328,66 @@ document.addEventListener("DOMContentLoaded", function () {
     setTimeout(() => {
         errorBox.style.display = "none";
     }, 6000);
+
+    function createNewTableRow() {
+        try {
+            //create new table row, append to table
+            let newTableRow = document.createElement("tr");
+            table.appendChild(newTableRow);
+            newTableRow.setAttribute("id", "tableRow");
+
+            //create Course Name cell in new row, append to new row
+            let newCourseCell = document.createElement("td");
+            newTableRow.append(newCourseCell);
+            //set the inner text of the cell to the value of the className input field
+            newCourseCell.innerText = document.getElementById("className").value;
+
+            //create Professor Name cell in new row, append to new row
+            let newProfessorCell = document.createElement("td");
+            newTableRow.appendChild(newProfessorCell);
+            //set the inner text of the cell to the value of the professorName input field
+            newProfessorCell.innerText = document.getElementById("professorName").value;
+
+            //delete icon
+            let newDeleteCell = document.createElement("td");
+            let icon = document.createElement("i");
+            icon.classList.add("fa-solid", "fa-trash-can");
+            icon.setAttribute("style", "cursor: pointer; color: red;");
+            newDeleteCell.appendChild(icon);
+            newTableRow.appendChild(newDeleteCell);
+
+            //remove row when delete icon clicked
+            icon.addEventListener("click", function () {
+                newTableRow.remove();
+            });
+
+            return true;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    //disable add button if either class or professor input is empty
+    function toggleAddRowButton() {
+        if (document.getElementById("className").value != "" && document.getElementById("professorName").value != "") {
+            document.getElementById("addRowToTable").disabled = false;
+        } else {
+            document.getElementById("addRowToTable").disabled = true;
+        }
+    }
+
+    document.getElementById("className").addEventListener("change", toggleAddRowButton);
+    document.getElementById("professorName").addEventListener("change", toggleAddRowButton);
+
+    const table = document.getElementById("tableBody");
+    document.getElementById("addRowToTable").addEventListener("click", function (event) {
+        event.preventDefault(); //prevent default form submission
+        if (createNewTableRow()) {
+            //clear input fields after adding to table
+            document.getElementById("className").value = "";
+            document.getElementById("professorName").value = "";
+            //disable add button
+            document.getElementById("addRowToTable").disabled = true;
+        }
+    });
 });

@@ -820,6 +820,10 @@ def test_location_accuracy(event_id):
 
     return Response("".join(output), mimetype='text/html')
 
+@app.route("/test")
+def test():
+    return render_template("temp.html")
+
 if __name__ == "__main__":
     scheduler.start()
     reschedule_pending_emails()
