@@ -1,19 +1,27 @@
 document.addEventListener("DOMContentLoaded", function () {
     let currentFrameIndex = 0;
+    const allFrames = document.getElementsByTagName("section");
+    const table = document.getElementById("tableBody");
+    const userAgreement = document.getElementById("userAgreement");
+    const privacyPolicy = document.getElementById("privacyPolicy");
+    const btnAllowLocation = document.getElementById("btnAllowLocation");
+    const btnSubmitEndLocation = document.getElementById("btnSubmitEndLocation");
+    let locationCaptured = false;
 
-    window.addEventListener("beforeunload", () => {
-        if (currentFrameIndex >= 2) {
-            sessionStorage.setItem("currentFrame", currentFrameIndex.toString());
-        }
-    });
-
-    let cachedStudent = {
+    let cachedStudent = JSON.parse(sessionStorage.getItem("cachedStudent")) || {
         email: '',
         lastName: '',
         scannedEventID: ''
     };
 
-    const allFrames = document.getElementsByTagName("section");
+    const savedFrame = parseInt(sessionStorage.getItem("currentFrame"));
+
+    showFrame(!isNaN(savedFrame) ? savedFrame : 0);
+    window.addEventListener("beforeunload", () => {
+        if (currentFrameIndex >= 2) {
+            sessionStorage.setItem("currentFrame", currentFrameIndex.toString());
+        }
+    });
 
     function showFrame(frameIndex) {
         for (let i = 0; i < allFrames.length; i++) {
@@ -21,17 +29,7 @@ document.addEventListener("DOMContentLoaded", function () {
         }
         currentFrameIndex = frameIndex;
 
-        // 🌟 Only restore form data when Frame 0 is shown
-        if (frameIndex === 0) {
-            restoreFormData();
-        }
-    }
-
-    const savedFrame = parseInt(sessionStorage.getItem("currentFrame"));
-    if (!isNaN(savedFrame)) {
-        showFrame(savedFrame);
-    } else {
-        showFrame(0);
+        restoreFormData(); // ✅ Always restore
     }
 
     function saveFormData() {
@@ -57,13 +55,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
         sessionStorage.setItem("studentFormData", JSON.stringify(formData));
     }
-
-    ["firstName", "lastName", "studentEmail"].forEach(id => {
-    const el = document.getElementById(id);
-        if (el) {
-            el.addEventListener("input", saveFormData);
-        }
-    });
 
     function restoreFormData() {
         const formData = JSON.parse(sessionStorage.getItem("studentFormData"));
@@ -103,12 +94,6 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     }
 
-
-    const restoredCache = JSON.parse(sessionStorage.getItem("cachedStudent"));
-    if (restoredCache) {
-        cachedStudent = restoredCache;
-    }
-
     function handleGeolocationError(error) {
         let message = "";
         switch (error.code) {
@@ -127,6 +112,198 @@ document.addEventListener("DOMContentLoaded", function () {
         showError(`📍 Location Error (${error.code}): ${message}`);
     }
 
+    function updateAllowLocationButton() {
+        btnAllowLocation.disabled = !(userAgreement.checked && privacyPolicy.checked);
+    }
+
+    function getLocationAndSubmit() {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                function (position) {
+                    let lat = position.coords.latitude;
+                    let lon = position.coords.longitude;
+                    let capturedStudentLocation = `${lat},${lon}`;
+                    locationCaptured = true;
+                    submitStudentCheckin(capturedStudentLocation);
+                },
+                error => {
+                    console.error("📍 Geolocation error:", error);
+                    handleGeolocationError(error);
+                },
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+            );
+        } else {
+            alert("Geolocation not supported by your browser.");
+        }
+    }
+
+    function submitStudentCheckin(capturedStudentLocation) {
+        let rows = document.querySelectorAll("#tableBody tr:not(#tableHeader)");
+        let courseData = [];
+
+        rows.forEach(row => {
+            let cells = row.querySelectorAll("td");
+            if (cells.length >= 2) {
+                courseData.push({
+                    className: cells[0].innerText.trim(),
+                    professorName: cells[1].innerText.trim()
+                });
+            }
+        });
+
+        let formData = {
+            firstName: document.getElementById("firstName").value,
+            lastName: cachedStudent.lastName,
+            email: cachedStudent.email,
+            scannedEventID: cachedStudent.scannedEventID,
+            studentLocation: capturedStudentLocation,
+            deviceId: getDeviceId(),
+            courses: courseData
+        };
+
+        fetch('/submit_student_checkin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formData)
+        })
+        .then(async response => {
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(errorText);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.status === "success") {
+                alert("Check-in successful!");
+                sessionStorage.setItem("cachedStudent", JSON.stringify(cachedStudent));
+                document.getElementById("errorMessage").style.display = "none";
+                showFrame(3);
+            } else {
+                const reason = data.message || "Check-in failed. Please try again.";
+                showError(reason);
+            }
+        })
+        .catch(error => {
+            const msg = error.message.toLowerCase();
+            if (msg.includes("device already used")) {
+                showErrorWithRestart("🚫 This device has already been used to check in. Please contact the event organizer.");
+            } else {
+                console.error("🚨 Fetch failed:", error);
+                showError("Network or server error:\n" + error.message);
+            }
+        });
+    }
+
+    function getDeviceId() {
+        let deviceId = localStorage.getItem("device_id");
+        if (!deviceId) {
+            deviceId = crypto.randomUUID();
+            localStorage.setItem("device_id", deviceId);
+        }
+        return deviceId;
+    }
+
+    function submitEndLocation(capturedEndLocation) {
+        const { email, lastName, scannedEventID } = cachedStudent;
+
+        const endPayload = {
+            email,
+            lastName,
+            scannedEventID,
+            endLocation: capturedEndLocation,
+        };
+
+        fetch('/submit_end_location', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(endPayload)
+        })
+        .then(async response => {
+            if (!response.ok) throw new Error(await response.text());
+            return response.json();
+        })
+        .then(data => {
+            if (data.status === "success") {
+                alert("End location submitted successfully!");
+                showFrame(4); // maybe final frame
+            } else {
+                showError(data.message || "Submission failed.");
+            }
+        })
+        .catch(error => {
+            showError("Error submitting end location:\n" + error.message);
+        });
+    }
+
+    function showError(message) {
+    const errorBox = document.getElementById("errorMessage");
+    errorBox.innerText = message;
+    errorBox.style.display = "block";
+
+    // ✅ Fix here: move timeout inside this function to access `errorBox`
+    setTimeout(() => {
+        errorBox.style.display = "none";
+    }, 6000);
+}
+
+    function createNewTableRow() {
+        try {
+            let newTableRow = document.createElement("tr");
+            table.appendChild(newTableRow);
+            newTableRow.setAttribute("id", "tableRow");
+
+            let newCourseCell = document.createElement("td");
+            newCourseCell.innerText = document.getElementById("className").value;
+            newTableRow.appendChild(newCourseCell);
+
+            let newProfessorCell = document.createElement("td");
+            newProfessorCell.innerText = document.getElementById("professorName").value;
+            newTableRow.appendChild(newProfessorCell);
+
+            let newDeleteCell = document.createElement("td");
+            let icon = document.createElement("i");
+            icon.classList.add("fa-solid", "fa-trash-can");
+            icon.setAttribute("style", "cursor: pointer; color: red;");
+            newDeleteCell.appendChild(icon);
+            newTableRow.appendChild(newDeleteCell);
+
+            icon.addEventListener("click", function () {
+                newTableRow.remove();
+                saveFormData(); // ✅ Save after deletion
+            });
+
+            saveFormData(); // ✅ Save after addition
+            return true;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    function toggleAddRowButton() {
+        document.getElementById("addRowToTable").disabled = !(document.getElementById("className").value != "" && document.getElementById("professorName").value != "");
+    }
+
+    function showErrorWithRestart(message) {
+        const errorBox = document.getElementById("errorMessage");
+        errorBox.innerHTML = `${message}<br><button id='restartBtn' style='margin-top:10px;background:white;color:#e63946;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;'>Return to Start</button>`;
+        errorBox.style.display = "block";
+
+        document.getElementById("restartBtn").addEventListener("click", () => {
+            sessionStorage.clear();
+            cachedStudent = { email: '', lastName: '', scannedEventID: '' };
+            showFrame(0);
+        });
+    }
+
+    ["firstName", "lastName", "studentEmail"].forEach(id => {
+    const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener("input", saveFormData);
+        }
+    });
+
+    // Element id for submit buttons on frame 1 and 2
     document.getElementById("btnSubmitFrame1").addEventListener("click", function (e) {
         e.preventDefault();
 
@@ -153,7 +330,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
         showFrame(1);
     });
-
     document.getElementById("btnSubmitFrame2").addEventListener("click", function (e) {
         e.preventDefault();
 
@@ -193,241 +369,6 @@ document.addEventListener("DOMContentLoaded", function () {
         })
         .catch(error => console.error('Error:', error));
     });
-
-    function fetchSuggestions(inputId, apiEndpoint, datalistId) {
-        const el = document.getElementById(inputId);
-        if (!el) return;
-        el.addEventListener('input', function () {
-            let searchQuery = this.value;
-            if (searchQuery.length > 1) {
-                fetch(apiEndpoint + '?query=' + searchQuery)
-                    .then(response => response.json())
-                    .then(data => {
-                        let datalist = document.getElementById(datalistId);
-                        datalist.innerHTML = "";
-                        data.forEach(item => {
-                            let option = document.createElement('option');
-                            option.value = item;
-                            datalist.appendChild(option);
-                        });
-                    });
-            }
-        });
-    }
-
-    fetchSuggestions('className', '/search_courses', 'courseSuggestions');
-    fetchSuggestions('professorName', '/search_professors', 'professorSuggestions');
-
-    const userAgreement = document.getElementById("userAgreement");
-    const privacyPolicy = document.getElementById("privacyPolicy");
-    const btnAllowLocation = document.getElementById("btnAllowLocation");
-
-    let locationCaptured = false;
-
-    function updateAllowLocationButton() {
-        btnAllowLocation.disabled = !(userAgreement.checked && privacyPolicy.checked);
-    }
-
-    userAgreement.addEventListener("change", updateAllowLocationButton);
-    privacyPolicy.addEventListener("change", updateAllowLocationButton);
-
-    function getLocationAndSubmit() {
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                function (position) {
-                    let lat = position.coords.latitude;
-                    let lon = position.coords.longitude;
-                    let capturedStudentLocation = `${lat},${lon}`;
-                    locationCaptured = true;
-                    submitStudentCheckin(capturedStudentLocation);
-                },
-                error => {
-                    console.error("📍 Geolocation error:", error);
-                    handleGeolocationError(error);
-                },
-                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-            );
-        } else {
-            alert("Geolocation not supported by your browser.");
-        }
-    }
-
-    btnAllowLocation.addEventListener("click", getLocationAndSubmit);
-
-    function submitStudentCheckin(capturedStudentLocation) {
-        let rows = document.querySelectorAll("#tableBody tr:not(#tableHeader)");
-        let courseData = [];
-
-        rows.forEach(row => {
-            let cells = row.querySelectorAll("td");
-            if (cells.length >= 2) {
-                courseData.push({
-                    className: cells[0].innerText.trim(),
-                    professorName: cells[1].innerText.trim()
-                });
-            }
-        });
-
-        let formData = {
-            firstName: document.getElementById("firstName").value,
-            lastName: cachedStudent.lastName,
-            email: cachedStudent.email,
-            scannedEventID: cachedStudent.scannedEventID,
-            studentLocation: capturedStudentLocation,
-            deviceId: getDeviceId(),
-            courses: courseData // Send the full list
-        };
-
-        fetch('/submit_student_checkin', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(formData)
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === "success") {
-                alert("Check-in successful!");
-                sessionStorage.setItem("cachedStudent", JSON.stringify(cachedStudent));
-                showFrame(3);
-            } else {
-                const reason = data.message || "Check-in failed. Please try again.";
-                alert(`❌ Check-in failed:\n${reason}`);
-            }
-        })
-        .catch(error => {
-            console.error("🚨 Fetch failed:", error);
-            alert("Network or server error:\n" + error.message);
-        });
-    }
-
-    const btnSubmitEndLocation = document.getElementById("btnSubmitEndLocation");
-
-    btnSubmitEndLocation.addEventListener("click", function () {
-        if (!cachedStudent.email || !cachedStudent.lastName || !cachedStudent.scannedEventID) {
-            cachedStudent.email = document.getElementById("studentEmail").value.trim();
-            cachedStudent.lastName = document.getElementById("lastName").value.trim();
-            cachedStudent.scannedEventID = window.location.pathname.split('/')[2];
-        }
-
-        const { email, lastName, scannedEventID } = cachedStudent;
-
-        if (!email || !lastName || !scannedEventID) {
-            alert("Missing student email, last name, or event ID. Please reload the page and try again.");
-            return;
-        }
-
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                function (position) {
-                    let endLat = position.coords.latitude;
-                    let endLon = position.coords.longitude;
-                    let capturedEndLocation = `${endLat},${endLon}`;
-
-                    let endPayload = {
-                        email,
-                        lastName,
-                        scannedEventID,
-                        endLocation: capturedEndLocation,
-                    };
-
-                    fetch('/submit_end_location', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(endPayload)
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.status === "success") {
-                            alert("End location successfully submitted!");
-                            sessionStorage.removeItem("currentFrame");
-                            sessionStorage.removeItem("studentFormData");
-                            sessionStorage.removeItem("cachedStudent");
-                            showFrame(4);
-                        } else {
-                            alert("Something went wrong submitting your final location.");
-                        }
-                    })
-                    .catch(error => {
-                        console.error("🚨 Fetch failed:", error);
-                        alert("Network error while submitting location.");
-                    });
-                },
-                error => {
-                    console.error("📍 Geolocation error:", error);
-                    handleGeolocationError(error);
-                },
-                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-            );
-        } else {
-            alert("Geolocation is not supported by your browser.");
-        }
-    });
-
-    function getDeviceId() {
-        let deviceId = localStorage.getItem("device_id");
-        if (!deviceId) {
-            deviceId = crypto.randomUUID();
-            localStorage.setItem("device_id", deviceId);
-        }
-        return deviceId;
-    }
-
-    function showError(message) {
-        const errorBox = document.getElementById("errorMessage");
-        errorBox.innerText = message;
-        errorBox.style.display = "block";
-    }
-
-    setTimeout(() => {
-        errorBox.style.display = "none";
-    }, 6000);
-
-    function createNewTableRow() {
-        try {
-            let newTableRow = document.createElement("tr");
-            table.appendChild(newTableRow);
-            newTableRow.setAttribute("id", "tableRow");
-
-            let newCourseCell = document.createElement("td");
-            newCourseCell.innerText = document.getElementById("className").value;
-            newTableRow.appendChild(newCourseCell);
-
-            let newProfessorCell = document.createElement("td");
-            newProfessorCell.innerText = document.getElementById("professorName").value;
-            newTableRow.appendChild(newProfessorCell);
-
-            let newDeleteCell = document.createElement("td");
-            let icon = document.createElement("i");
-            icon.classList.add("fa-solid", "fa-trash-can");
-            icon.setAttribute("style", "cursor: pointer; color: red;");
-            newDeleteCell.appendChild(icon);
-            newTableRow.appendChild(newDeleteCell);
-
-            icon.addEventListener("click", function () {
-                newTableRow.remove();
-                saveFormData(); // ✅ Save after deletion
-            });
-
-            saveFormData(); // ✅ Save after addition
-            return true;
-        } catch (error) {
-            return false;
-        }
-    }
-
-    //disable add button if either class or professor input is empty
-    function toggleAddRowButton() {
-        if (document.getElementById("className").value != "" && document.getElementById("professorName").value != "") {
-            document.getElementById("addRowToTable").disabled = false;
-        } else {
-            document.getElementById("addRowToTable").disabled = true;
-        }
-    }
-
-    document.getElementById("className").addEventListener("change", toggleAddRowButton);
-    document.getElementById("professorName").addEventListener("change", toggleAddRowButton);
-
-    const table = document.getElementById("tableBody");
     document.getElementById("addRowToTable").addEventListener("click", function (event) {
         event.preventDefault(); //prevent default form submission
         if (createNewTableRow()) {
@@ -438,4 +379,71 @@ document.addEventListener("DOMContentLoaded", function () {
             document.getElementById("addRowToTable").disabled = true;
         }
     });
+    document.getElementById("className").addEventListener("change", toggleAddRowButton);
+    document.getElementById("professorName").addEventListener("change", toggleAddRowButton);
+
+    userAgreement.addEventListener("change", updateAllowLocationButton);
+    privacyPolicy.addEventListener("change", updateAllowLocationButton);
+
+    btnAllowLocation.addEventListener("click", getLocationAndSubmit);
+    btnSubmitEndLocation.addEventListener("click", function () {
+        if (!cachedStudent.email || !cachedStudent.lastName || !cachedStudent.scannedEventID) {
+            // try restoring from form
+            cachedStudent.email = document.getElementById("studentEmail").value.trim();
+            cachedStudent.lastName = document.getElementById("lastName").value.trim();
+            cachedStudent.scannedEventID = window.location.pathname.split('/')[2];
+        }
+
+        if (!cachedStudent.email || !cachedStudent.lastName || !cachedStudent.scannedEventID) {
+            alert("Missing student data. Please refresh.");
+            return;
+        }
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                function (position) {
+                    const capturedEndLocation = `${position.coords.latitude},${position.coords.longitude}`;
+                    submitEndLocation(capturedEndLocation); // ✅ use helper
+                },
+                error => {
+                    console.error("📍 End location error:", error);
+                    handleGeolocationError(error);
+                },
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+            );
+        } else {
+            alert("Geolocation not supported by this browser.");
+        }
+    });
+
+    // Load courses
+    fetch('/search_courses?query=')
+      .then(res => res.json())
+      .then(data => {
+        new TomSelect("#className", {
+          placeholder: "Select or type a class name...",
+          create: true,
+          maxItems: 1,
+          valueField: "name",
+          labelField: "name",
+          searchField: "name",
+          options: data.map(name => ({ name: name.name || name })),
+        });
+      });
+
+    // Load professors
+    fetch('/search_professors?query=')
+      .then(res => res.json())
+      .then(data => {
+        new TomSelect("#professorName", {
+          placeholder: "Select or type a professor name...",
+          create: true,
+          maxItems: 1,
+          valueField: "name",
+          labelField: "name",
+          searchField: "name",
+          options: data.map(name => ({ name: name.name || name })),
+        });
+      });
 });
+
