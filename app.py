@@ -780,8 +780,8 @@ def find_student():
     students = None
 
     if request.method == 'POST':
-        first_name = request.form['first_name'].strip()
-        last_name = request.form['last_name'].strip()
+        first_name = request.form['first_name'].strip().lower()
+        last_name = request.form['last_name'].strip().lower()
 
         if first_name or last_name:
             conn = get_db_connection()
@@ -791,9 +791,13 @@ def find_student():
             SELECT sc.*, e.eventName, e.startTime, e.stopTime
             FROM student_checkins sc
             LEFT JOIN events e ON sc.scannedEventID = e.eventID
-            WHERE (sc.firstName LIKE ? OR sc.lastName LIKE ?)
+            WHERE (? != '' AND LOWER(sc.firstName) LIKE ?)
+               OR (? != '' AND LOWER(sc.lastName) LIKE ?)
             '''
-            params = [f'%{first_name}%', f'%{last_name}%']
+            params = [
+                first_name, f'%{first_name}%',
+                last_name, f'%{last_name}%'
+            ]
 
             cursor.execute(query, params)
             students = cursor.fetchall()
