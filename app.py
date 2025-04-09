@@ -36,7 +36,7 @@ if not os.path.exists(QR_CODE_FOLDER):
 
 GOOGLE_API_KEY = "AIzaSyAzf_3rNo5yi24L3Mu35o5VHaw1PwVmeTs"  # Replace with your actual Google API key
 
-ENFORCE_DEVICE_ID = False  # You can toggle this off to disable device restriction (false means it doesnt wait)
+ENFORCE_DEVICE_ID = True  # You can toggle this off to disable device restriction (false means it doesnt wait)
 
 # Function to connect to SQLite
 def get_db_connection():
@@ -256,37 +256,46 @@ def verify_code():
         return jsonify({'error': 'Invalid code'}), 400
 
 # **API Routes for Course & Professor Search**
+
 @app.route('/search_courses', methods=['GET'])
 def search_courses():
-    """Search for courses based on user input."""
-    #TEMPORARY - connect to fake DB
-    conn = sqlite3.connect("fake.db")
-    conn.row_factory = sqlite3.Row  # Enables dictionary-style access
-    conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
-
     search_term = request.args.get('query', '')
-    #conn = get_db_connection()
+
+    conn = sqlite3.connect("fake.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT course_name FROM Courses WHERE course_name LIKE ?", (f"%{search_term}%",))
+
+    if search_term:
+        cursor.execute("SELECT course_name FROM Courses WHERE course_name LIKE ?", (f"%{search_term}%",))
+    else:
+        cursor.execute("SELECT course_name FROM Courses")  # No filtering!
+
     results = cursor.fetchall()
     conn.close()
-    return jsonify([row[0] for row in results])
+
+    return jsonify([{"name": row[0]} for row in results])
 
 @app.route('/search_professors', methods=['GET'])
 def search_professors():
     """Search for professors based on user input."""
-    #TEMPORARY - connect to fake DB
     conn = sqlite3.connect("fake.db")
-    conn.row_factory = sqlite3.Row  # Enables dictionary-style access
-    conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
 
     search_term = request.args.get('query', '')
-    #conn = get_db_connection()
+
     cursor = conn.cursor()
-    cursor.execute("SELECT professor_name FROM Professor WHERE professor_name LIKE ?", (f"%{search_term}%",))
+    if search_term:
+        cursor.execute(
+            "SELECT professor_name AS name FROM Professor WHERE professor_name LIKE ?",
+            (f"%{search_term}%",)
+        )
+    else:
+        cursor.execute("SELECT professor_name AS name FROM Professor")
+
     results = cursor.fetchall()
     conn.close()
-    return jsonify([row[0] for row in results])
+
+    return jsonify([dict(row) for row in results])
 
 @app.route('/submit_student_checkin', methods=['POST'])
 def submit_student_checkin():
@@ -310,10 +319,8 @@ def submit_student_checkin():
         ''', (scannedEventID, deviceId))
         if cursor.fetchone():
             conn.close()
-            return jsonify({
-                'status': 'error',
-                'message': 'This device has already been used to check in for this event.'
-            })
+            print(f"Same device was tried to submit student check-in for {scannedEventID}")
+            return jsonify({"status": "error", "message": "device already used"}), 403
 
     # Fetch event start time once for timing logic
     cursor.execute('SELECT eventDate, startTime FROM events WHERE eventID = ?', (scannedEventID,))
