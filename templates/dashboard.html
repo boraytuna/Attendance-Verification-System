@@ -70,6 +70,20 @@
         font-style: italic;
         color: #777;
     }
+
+    .qr-button-link {
+        background-color: #28a745;
+        color: white;
+        text-decoration: none;
+        padding: 8px 12px;
+        border-radius: 5px;
+        font-size: 14px;
+        display: inline-block;
+        transition: background-color 0.2s;
+    }
+    .qr-button-link:hover {
+        background-color: #218838;
+    }
 </style>
 
 <div class="dashboard-container">
@@ -117,8 +131,8 @@
             </td>
             <td>
                 <div class="qr-buttons">
-                    <a href="/qr_code/{{ event['eventID'] }}">
-                        <button>View QR Code</button>
+                    <a href="/qr_code/{{ event['eventID'] }}" target="_blank" rel="noopener noreferrer" class="qr-button-link">
+                        View QR Code
                     </a>
                 </div>
             </td>
@@ -157,8 +171,8 @@
             </td>
             <td>
                 <div class="qr-buttons">
-                    <a href="/qr_code/{{ event['eventID'] }}">
-                        <button>View QR Code</button>
+                    <a href="/qr_code/{{ event['eventID'] }}" target="_blank" rel="noopener noreferrer" class="qr-button-link">
+                        View QR Code
                     </a>
                 </div>
             </td>
