@@ -4,22 +4,12 @@ html, body {
     margin: auto;
     padding: 0;
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     font-family: 'Segoe UI', sans-serif;
     background-color: #f5f6f7;
     color: #333;
-}
-
-.content {
-    width: 60%;
-    height: 60%;
-    margin: auto;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
 }
 
 .btn-container {
@@ -74,6 +64,17 @@ button:hover {
 .input-container input {
     width: 60%;
     height: 2rem;
+}
+
+label {
+    width: 37%;
+    text-align: left;
+    margin-bottom: 0.25rem;
+}
+
+.failed-container {
+    text-align: center;
+    margin: 0;
 }
 
 /* .inputContainer {

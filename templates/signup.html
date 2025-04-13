@@ -6,27 +6,34 @@
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/styles.css') }}">
 </head>
 <body>
-    <div class="content">
-        <h1 style="font-size: 2rem; font-weight: bold; text-align: center;">Create An Account</h1>
-        <form class="form-container">
-            <label for="email">Enter your email</label>
-            <div class="input-container">
-                <i class="fa-regular fa-user"></i>
-                <input type="text" id="email" name="email" placeholder="Email" required>
-            </div>
-            <label for="password">Create a password</label>
-            <div class="input-container">
-                <i class="fa-regular fa-user"></i>
-                <input type="password" id="password" name="password" placeholder="Password" required>
-            </div>
-        </form>
-        <button id="submitSignup">Create Account</button>
+    <h1 style="font-size: 2rem; font-weight: bold; text-align: center;">Create An Account</h1>
+    <div class="failed-container" id="failed-container" style="display:none; margin:0; padding:0;">
+        <p class="failed-message-header" id="failed-message-header" style="margin:0; padding:0;">Failed to create an account!</p>
+        <p class="failed-message" id="failed-message" style="margin:0; padding:0;"></p>
     </div>
+    <form class="form-container">
+        <label for="email">Email</label>
+        <div class="input-container">
+            <i class="fa-regular fa-user"></i>
+            <input type="text" id="email" name="email" placeholder="Email" required>
+        </div>
+        <label for="password">Password</label>
+        <div class="input-container">
+            <i class="fa-regular fa-user"></i>
+            <input type="password" id="password" name="password" minlength="6" placeholder="Password" required>
+        </div>
+    </form>
+    <button id="submitSignup" type="submit">Create Account</button>
 </body>
 <script>
+    const failedContainer = document.getElementById("failed-container");
+    const failedMessageHeader = document.getElementById("failed-message-header");
+    const failedMessage = document.getElementById("failed-message");
+
     document.getElementById("submitSignup").addEventListener("click", function() {
         let email = document.getElementById("email").value;
         let password = document.getElementById("password").value;
+
         if (email) {
             fetch("/submit_signup", {
                 method: "POST",
@@ -41,10 +48,14 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    alert("Account created successfully!");
+                    //redirect user to login page after successful signup
                     window.location.href = "{{ url_for('login') }}";
                 } else {
-                    alert("Error creating account. Please try again.");
+                    failedContainer.style.display = "block";
+                    failedMessage.innerText = data.message;
+                    if (data.message === "An account with this email already exists.") {
+                        failedMessage.innerHTML += `<br><p><a href="{{ url_for('login') }}">Login</a> instead?</p>`;
+                    }
                 }
             })
         }

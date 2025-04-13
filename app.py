@@ -8,7 +8,8 @@ import math
 from datetime import datetime, timedelta
 from geopy.distance import geodesic
 from apscheduler.schedulers.background import BackgroundScheduler
-import auth
+import passlib, passlib.hash
+from passlib.hash import sha256_crypt
 
 app = Flask(__name__)
 
@@ -22,10 +23,9 @@ app.secret_key = os.urandom(24)
 scheduler = BackgroundScheduler()
 scheduler.start()
 
-
 ENFORCE_DEVICE_ID = True  # Can toggle off for testing or relaxed events
 
-#mail server configuration
+# mail server configuration
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
@@ -38,10 +38,13 @@ mail = Mail(app)
 if not os.path.exists(QR_CODE_FOLDER):
     os.makedirs(QR_CODE_FOLDER)
 
-GOOGLE_API_KEY = "AIzaSyAzf_3rNo5yi24L3Mu35o5VHaw1PwVmeTs"  # Replace with your actual Google API key
+GOOGLE_API_KEY = "AIzaSyAzf_3rNo5yi24L3Mu35o5VHaw1PwVmeTs"
 
 # Function to connect to SQLite
 def get_db_connection():
+    """
+    Establish a connection to the SQLite attendance.db database.
+    """
     conn = sqlite3.connect(DATABASE_NAME)
     conn.row_factory = sqlite3.Row  # Enables dictionary-style access
     conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
@@ -49,6 +52,9 @@ def get_db_connection():
 
 # TEMPORARY - function to connect to fake DB
 def get_fakedb_connection():
+    """
+    Establish a connection to the SQLite fake.db database.
+    """
     conn = sqlite3.connect("fake.db")
     conn.row_factory = sqlite3.Row  # Enables dictionary-style access
     conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
@@ -63,7 +69,8 @@ def create_tables():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             userID INTEGER PRIMARY KEY AUTOINCREMENT,
-            userEmail TEXT NOT NULL
+            email TEXT NOT NULL,
+            password TEXT NOT NULL
         )
     ''')
 
@@ -131,7 +138,7 @@ def landing_page():
 @app.route("/signup")
 def signup():
     """
-    Flask route for the signup page.
+    Flask route rendering for the signup page.
 
     Returns:
         the rendered signup page HTML template
@@ -145,19 +152,91 @@ def submit_signup():
     """
     data = request.json
     email = data.get('email')
-    password = data.get('password')
-    #hash password
+    password = sha256_crypt.encrypt(data.get('password'))
 
+    conn = get_db_connection()
+    try:
+        # first check if account with email already exists
+        user = conn.cursor().execute('''
+            SELECT * FROM users WHERE email = ?
+            ''', (email,)
+        ).fetchone()
+
+        if user is not None:
+            return jsonify({
+                "success": False,
+                "message": "An account with this email already exists."
+            })
+        else:
+            conn.cursor().execute('''
+                INSERT INTO users (email, password) VALUES (?, ?)
+                ''', (email, password)
+            )
+            conn.commit()
+
+            return jsonify({
+                "success": True,
+                "message": "Account creation successful!"
+            })
+    except sqlite3.Error as e:
+        return jsonify({
+            "success": False,
+            "message": f"Database error: {str(e)}"
+        })
+    finally:
+        conn.close()
 
 @app.route("/login")
 def login():
     """
-    Flask route for the login page.
+    Flask route rendering for the login page.
 
     Returns:
         the rendered login page HTML template
     """
     return render_template("login.html")
+
+@app.route("/submit_login", methods=["POST"])
+def submit_login():
+    """
+    API route to handle user login.
+    """
+    data = request.json
+    email = data.get('email')
+    password = data.get('password')
+    
+    conn = get_db_connection()
+    try:
+        user = conn.cursor().execute('''
+            SELECT * FROM users WHERE email = ?
+            ''', (email,)
+        ).fetchone()
+    except sqlite3.Error as e:
+        return jsonify({
+            "success": False,
+            "message": f"Database error: {str(e)}"
+        })
+    finally:
+        conn.close()
+
+    if user is None:
+       return jsonify({
+            "success": False,
+            "message": "No account exists with this email."
+        })
+    elif sha256_crypt.verify(password, user[2]):
+        # store userID and email in session
+        session['user_id'] = user[0]
+        session['user_email'] = user[1]
+        return jsonify({
+            "success": True,
+            "message": "Login successful."
+        })
+    else:
+        return jsonify({
+            "success": False,
+            "message": "Incorrect password."
+        })
 
 @app.route("/dashboard")
 def dashboard():
@@ -503,10 +582,10 @@ def construct_email_records(event_id):
     return emails
 
 def send_professor_emails(event_id):
-    print(f"[🚨 EMAIL JOB STARTED] Event ID: {event_id}")
     """
     Send emails to professors with a summary of student attendance records.
     """
+    print(f"[🚨 EMAIL JOB STARTED] Event ID: {event_id}")
     emails = construct_email_records(event_id)
     print(f"[🗃 EMAIL DATA] Found {len(emails)} professors for Event ID {event_id}")
     professors = emails.keys()
