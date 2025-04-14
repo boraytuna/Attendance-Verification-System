@@ -22,7 +22,8 @@ app.secret_key = os.urandom(24)
 
 #scheduler for scheduling professor attendance emails
 scheduler = BackgroundScheduler()
-scheduler.start()
+if not scheduler.running:
+    scheduler.start()
 
 ENFORCE_DEVICE_ID = True  # Can toggle off for testing or relaxed events
 
@@ -87,7 +88,8 @@ def create_tables():
             stopTime TIME NOT NULL,
             latitude REAL NOT NULL,
             longitude REAL NOT NULL,
-            eventAddress TEXT NOT NULL
+            eventAddress TEXT NOT NULL,
+            professorID INTEGER NOT NULL
         )
     ''')
 
@@ -273,29 +275,33 @@ def dashboard():
     Returns:
         the rendered dashboard page HTML template
     """
+    if 'user_id' not in session:
+        return redirect(url_for("login"))
+
+    user_id = session["user_id"]
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-
-    # Upcoming events: event start is in the future
+    # Upcoming events: future events created by this professor
     cursor.execute("""
         SELECT e.*, p.name AS place_name, p.building
         FROM events e
         LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
-        WHERE eventDate || 'T' || startTime >= ?
+        WHERE eventDate || 'T' || startTime >= ? AND professorID = ?
         ORDER BY eventDate, startTime
-    """, (now,))
+    """, (now, user_id))
     upcoming = cursor.fetchall()
 
-    # Past events: event has already ended
+    # Past events: past events created by this professor
     cursor.execute("""
         SELECT e.*, p.name AS place_name, p.building
         FROM events e
         LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
-        WHERE eventDate || 'T' || stopTime < ?
+        WHERE eventDate || 'T' || stopTime < ? AND professorID = ?
         ORDER BY eventDate DESC, startTime DESC
-    """, (now,))
+    """, (now, user_id))
     past = cursor.fetchall()
 
     conn.close()
@@ -793,22 +799,24 @@ def submit_event():
     stop_time = request.form["stop_time"]
     event_location = request.form["event_location"]
     event_address = request.form.get("event_address", "Unknown Location")
+    professor_id = session.get("user_id")  # NEW: Associate with logged-in professor
 
-    # NEW: Parse location
+    # Parse location
     try:
         lat, lng = map(float, event_location.split(","))
     except ValueError:
         flash("❌ Invalid location format.", "error")
         return redirect(url_for("events"))
 
-    # NEW: Validate time logic
+    # Validate time logic
     if start_time >= stop_time:
         flash("❌ End time must be later than start time.", "error")
         return redirect(url_for("events"))
 
-    # NEW: Prevent duplicate event at same time/location
     conn = get_db_connection()
     cursor = conn.cursor()
+
+    # Check for duplicate event
     cursor.execute("""
         SELECT * FROM events 
         WHERE eventDate = ? AND startTime = ? AND stopTime = ? 
@@ -821,25 +829,25 @@ def submit_event():
         flash("❌ Another event is already scheduled at this time and location.", "error")
         return redirect(url_for("events"))
 
-    # SAFE TO INSERT
+    # Insert event (✅ includes professorID now)
     cursor.execute('''
-        INSERT INTO events (eventName, eventDate, startTime, stopTime, latitude, longitude, eventAddress)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', (event_name, event_date, start_time, stop_time, lat, lng, event_address))
+        INSERT INTO events (
+            eventName, eventDate, startTime, stopTime,
+            latitude, longitude, eventAddress, professorID
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (event_name, event_date, start_time, stop_time, lat, lng, event_address, professor_id))
     event_id = cursor.lastrowid
     conn.commit()
     conn.close()
 
     get_or_create_qr_code(event_id)
 
-    # ✅ Schedule email 5 minutes after event ends
+    # Schedule professor email 5 minutes after event ends
     try:
-        # Combine date and time from form
         event_end_str = f"{event_date} {stop_time}"
         event_end_dt = datetime.strptime(event_end_str, "%Y-%m-%d %H:%M")
         executetime = event_end_dt + timedelta(minutes=5)
 
-        # Schedule the email with a unique job ID
         scheduler.add_job(
             func=send_professor_emails,
             trigger='date',
@@ -860,15 +868,19 @@ def submit_event():
 def get_events():
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT eventID, eventName, eventDate, startTime, stopTime, latitude, longitude, eventAddress FROM events")
+
+    cursor.execute("""
+        SELECT eventID, eventName, eventDate, startTime, stopTime,
+               latitude, longitude, eventAddress
+        FROM events
+    """)
     events = cursor.fetchall()
     conn.close()
+
     formatted_events = []
     for event in events:
-        # Convert to dictionary (assuming events is a list of tuples)
         event_dict = dict(event)
 
-        # Combine date and time for FullCalendar's required format
         start_datetime = f"{event_dict['eventDate']}T{event_dict['startTime']}"
         end_datetime = f"{event_dict['eventDate']}T{event_dict['stopTime']}" if event_dict["stopTime"] else None
 
@@ -960,6 +972,6 @@ def test_send_professor_email(event_id):
     return f"Triggered professor email manually for event {event_id}"
 
 if __name__ == "__main__":
-    scheduler.start()
+    #scheduler.start()
     reschedule_pending_emails()
     app.run(debug=True)
