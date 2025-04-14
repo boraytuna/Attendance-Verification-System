@@ -8,6 +8,8 @@ import math
 from datetime import datetime, timedelta
 from geopy.distance import geodesic
 from apscheduler.schedulers.background import BackgroundScheduler
+import passlib, passlib.hash
+from passlib.hash import sha256_crypt
 
 app = Flask(__name__)
 
@@ -19,9 +21,11 @@ app.secret_key = os.urandom(24)
 
 #scheduler for scheduling professor attendance emails
 scheduler = BackgroundScheduler()
+scheduler.start()
 
+ENFORCE_DEVICE_ID = True  # Can toggle off for testing or relaxed events
 
-#mail server configuration
+# mail server configuration
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
@@ -34,12 +38,13 @@ mail = Mail(app)
 if not os.path.exists(QR_CODE_FOLDER):
     os.makedirs(QR_CODE_FOLDER)
 
-GOOGLE_API_KEY = "AIzaSyAzf_3rNo5yi24L3Mu35o5VHaw1PwVmeTs"  # Replace with your actual Google API key
-
-ENFORCE_DEVICE_ID = True  # You can toggle this off to disable device restriction (false means it doesnt wait)
+GOOGLE_API_KEY = "AIzaSyAzf_3rNo5yi24L3Mu35o5VHaw1PwVmeTs"
 
 # Function to connect to SQLite
 def get_db_connection():
+    """
+    Establish a connection to the SQLite attendance.db database.
+    """
     conn = sqlite3.connect(DATABASE_NAME)
     conn.row_factory = sqlite3.Row  # Enables dictionary-style access
     conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
@@ -47,6 +52,9 @@ def get_db_connection():
 
 # TEMPORARY - function to connect to fake DB
 def get_fakedb_connection():
+    """
+    Establish a connection to the SQLite fake.db database.
+    """
     conn = sqlite3.connect("fake.db")
     conn.row_factory = sqlite3.Row  # Enables dictionary-style access
     conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
@@ -56,6 +64,17 @@ def get_fakedb_connection():
 def create_tables():
     conn = get_db_connection()
     cursor = conn.cursor()
+
+    # Create Users Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            userID INTEGER PRIMARY KEY AUTOINCREMENT,
+            first_name TEXT NOT NULL,
+            last_name TEXT NOT NULL,
+            email TEXT NOT NULL,
+            password TEXT NOT NULL
+        )
+    ''')
 
     # Create Events Table
     cursor.execute('''
@@ -70,11 +89,6 @@ def create_tables():
             eventAddress TEXT NOT NULL
         )
     ''')
-    # ✅ Add professor_email_sent column if not exists
-    try:
-        cursor.execute("ALTER TABLE events ADD COLUMN professor_email_sent INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass  # Ignore if it already exists
 
     # Create Student Check-Ins Table
     cursor.execute('''
@@ -113,17 +127,119 @@ def create_tables():
 # Ensure database tables exist
 create_tables()
 
-@app.route('/privacy-policy.html')
-def privacy_policy():
-    return render_template('privacy-policy.html')
+@app.route("/")
+def landing_page():
+    """
+    Flask route for the landing page.
+    
+    Returns:
+        the rendered landing page HTML template
+    """
+    return render_template("landing_page.html")
 
-@app.route('/user-agreement.html')
-def user_agreement():
-    return render_template('user-agreement.html')
+@app.route("/signup")
+def signup():
+    """
+    Flask route rendering for the signup page.
 
-@app.route("/") #Made by olu
-def home():
-    return redirect(url_for("dashboard"))
+    Returns:
+        the rendered signup page HTML template
+    """
+    return render_template("signup.html")
+
+@app.route("/submit_signup", methods=["POST"])
+def submit_signup():
+    """
+    API route to handle user signup.
+    """
+    data = request.json
+    first_name = data.get('first_name')
+    last_name = data.get('last_name')
+    email = data.get('email')
+    password = sha256_crypt.encrypt(data.get('password'))
+
+    conn = get_db_connection()
+    try:
+        # first check if account with email already exists
+        user = conn.cursor().execute('''
+            SELECT * FROM users WHERE email = ?
+        ''', (email,)).fetchone()
+
+        if user is not None:
+            return jsonify({
+                "success": False,
+                "message": "An account with this email already exists."
+            })
+        else:
+            conn.cursor().execute('''
+                INSERT INTO users (first_name, last_name, email, password)
+                VALUES (?, ?, ?, ?)
+            ''', (first_name, last_name, email, password))
+            conn.commit()
+
+            return jsonify({
+                "success": True,
+                "message": "Account creation successful!"
+            })
+    except sqlite3.Error as e:
+        return jsonify({
+            "success": False,
+            "message": f"Database error: {str(e)}"
+        })
+    finally:
+        conn.close()
+
+@app.route("/submit_login", methods=["POST"])
+def submit_login():
+    """
+    API route to handle user login.
+    """
+    data = request.json
+    email = data.get('email')
+    password = data.get('password')
+
+    conn = get_db_connection()
+    try:
+        user = conn.cursor().execute('''
+            SELECT * FROM users WHERE email = ?
+        ''', (email,)).fetchone()
+    except sqlite3.Error as e:
+        return jsonify({
+            "success": False,
+            "message": f"Database error: {str(e)}"
+        })
+    finally:
+        conn.close()
+
+    if user is None:
+        return jsonify({
+            "success": False,
+            "message": "No account exists with this email."
+        })
+    elif sha256_crypt.verify(password, user[4]):  # assuming index 4 = password
+        session['user_id'] = user[0]
+        session['user_email'] = user[3]
+        session['first_name'] = user[1]
+        session['last_name'] = user[2]
+        return jsonify({
+            "success": True,
+            "message": "Login successful."
+        })
+    else:
+        return jsonify({
+            "success": False,
+            "message": "Incorrect password."
+        })
+
+@app.route("/login")
+def login():
+    """
+    Flask route rendering for the login page.
+
+    Returns:
+        the rendered login page HTML template
+    """
+    return render_template("login.html")
 
 @app.route("/dashboard")
 def dashboard():
@@ -179,6 +295,42 @@ def places():
     places = cursor.fetchall()
     conn.close()
     return render_template("places.html", places=places)
+
+
+@app.route('/account', methods=['GET', 'POST'])
+def account():
+    if 'user_email' not in session:
+        return redirect(url_for('login'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # fetch full user info
+    cursor.execute("""
+        SELECT first_name, last_name, email, password FROM users WHERE email = ?
+    """, (session['user_email'],))
+    user = cursor.fetchone()
+
+    if request.method == 'POST':
+        new_password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+
+        if new_password != confirm_password:
+            flash("❌ Passwords do not match.")
+        else:
+            encrypted = sha256_crypt.hash(new_password)
+            cursor.execute("""
+                UPDATE users SET password = ? WHERE email = ?
+            """, (encrypted, session['user_email']))
+            conn.commit()
+            conn.close()
+
+            flash("✅ Password updated successfully. Please log in again.")
+            session.clear()  # force logout
+            return redirect(url_for('login'))
+
+    conn.close()
+    return render_template('account.html', user=user)
 
 # Function to generate (or retrieve) QR code
 def get_or_create_qr_code(event_id):
@@ -256,46 +408,37 @@ def verify_code():
         return jsonify({'error': 'Invalid code'}), 400
 
 # **API Routes for Course & Professor Search**
-
 @app.route('/search_courses', methods=['GET'])
 def search_courses():
-    search_term = request.args.get('query', '')
-
+    """Search for courses based on user input."""
+    #TEMPORARY - connect to fake DB
     conn = sqlite3.connect("fake.db")
+    conn.row_factory = sqlite3.Row  # Enables dictionary-style access
+    conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
+
+    search_term = request.args.get('query', '')
+    #conn = get_db_connection()
     cursor = conn.cursor()
-
-    if search_term:
-        cursor.execute("SELECT course_name FROM Courses WHERE course_name LIKE ?", (f"%{search_term}%",))
-    else:
-        cursor.execute("SELECT course_name FROM Courses")  # No filtering!
-
+    cursor.execute("SELECT course_name FROM Courses WHERE course_name LIKE ?", (f"%{search_term}%",))
     results = cursor.fetchall()
     conn.close()
-
-    return jsonify([{"name": row[0]} for row in results])
+    return jsonify([row[0] for row in results])
 
 @app.route('/search_professors', methods=['GET'])
 def search_professors():
     """Search for professors based on user input."""
+    #TEMPORARY - connect to fake DB
     conn = sqlite3.connect("fake.db")
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
+    conn.row_factory = sqlite3.Row  # Enables dictionary-style access
+    conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
 
     search_term = request.args.get('query', '')
-
+    #conn = get_db_connection()
     cursor = conn.cursor()
-    if search_term:
-        cursor.execute(
-            "SELECT professor_name AS name FROM Professor WHERE professor_name LIKE ?",
-            (f"%{search_term}%",)
-        )
-    else:
-        cursor.execute("SELECT professor_name AS name FROM Professor")
-
+    cursor.execute("SELECT professor_name FROM Professor WHERE professor_name LIKE ?", (f"%{search_term}%",))
     results = cursor.fetchall()
     conn.close()
-
-    return jsonify([dict(row) for row in results])
+    return jsonify([row[0] for row in results])
 
 @app.route('/submit_student_checkin', methods=['POST'])
 def submit_student_checkin():
@@ -303,15 +446,16 @@ def submit_student_checkin():
     firstName = data['firstName']
     lastName = data['lastName']
     email = data['email']
+    classForExtraCredit = data['classForExtraCredit']
+    professorForExtraCredit = data['professorForExtraCredit']
     scannedEventID = int(data['scannedEventID'])
     studentLocation = str(data['studentLocation'])
-    deviceId = data.get('deviceId')
-    course_entries = data.get('courses', [])  # Expecting list of {className, professorName}
+    deviceId = data.get('deviceId')  # New field from frontend
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # ✅ Optional device restriction
+    # ✅ Device restriction check (optional)
     if ENFORCE_DEVICE_ID:
         cursor.execute('''
             SELECT 1 FROM student_checkins
@@ -319,95 +463,72 @@ def submit_student_checkin():
         ''', (scannedEventID, deviceId))
         if cursor.fetchone():
             conn.close()
-            print(f"Same device was tried to submit student check-in for {scannedEventID}")
-            return jsonify({"status": "error", "message": "device already used"}), 403
+            return jsonify({
+                'status': 'error',
+                'message': 'This device has already been used to check in for this event.'
+            })
 
-    # Fetch event start time once for timing logic
+    # Insert student check-in
+    cursor.execute('''
+        INSERT INTO student_checkins (
+            firstName, lastName, email, classForExtraCredit,
+            professorForExtraCredit, scannedEventID, studentLocation, deviceId
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        firstName, lastName, email, classForExtraCredit,
+        professorForExtraCredit, scannedEventID, studentLocation, deviceId
+    ))
+
+    # Get checkinID for this new row
+    cursor.execute('''
+        SELECT checkinID, checkinTime FROM student_checkins
+        WHERE email = ? AND scannedEventID = ? AND lastName = ?
+        ORDER BY checkinTime DESC LIMIT 1
+    ''', (email, scannedEventID, lastName))
+    result = cursor.fetchone()
+
+    checkin_id = result["checkinID"]
+    checkin_time = datetime.strptime(result["checkinTime"], "%Y-%m-%d %H:%M:%S")
+
+    # Fetch event start time
     cursor.execute('SELECT eventDate, startTime FROM events WHERE eventID = ?', (scannedEventID,))
     event_row = cursor.fetchone()
-    if not event_row:
-        conn.close()
-        return jsonify({'status': 'error', 'message': 'Event not found'}), 404
-
     event_start = datetime.strptime(f"{event_row['eventDate']} {event_row['startTime']}", "%Y-%m-%d %H:%M")
+
+    # Determine attendance status based on grace period
     grace_period_minutes = 10
     late_cutoff = event_start + timedelta(minutes=grace_period_minutes)
 
-    responses = []
-
-    for entry in course_entries:
-        className = entry.get('className')
-        professorName = entry.get('professorName')
-
-        if not className or not professorName:
-            continue  # skip if data is missing
-
-        # Insert student check-in
-        cursor.execute('''
-            INSERT INTO student_checkins (
-                firstName, lastName, email, classForExtraCredit,
-                professorForExtraCredit, scannedEventID, studentLocation, deviceId
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            firstName, lastName, email, className,
-            professorName, scannedEventID, studentLocation, deviceId
-        ))
-
-        # Fetch latest check-in row to get timestamp
-        cursor.execute('''
-            SELECT checkinID, checkinTime FROM student_checkins
-            WHERE email = ? AND scannedEventID = ? AND lastName = ?
-            AND classForExtraCredit = ? AND professorForExtraCredit = ?
-            ORDER BY checkinTime DESC LIMIT 1
-        ''', (email, scannedEventID, lastName, className, professorName))
-        result = cursor.fetchone()
-
-        if result:
-            checkin_time = datetime.strptime(result["checkinTime"], "%Y-%m-%d %H:%M:%S")
-            status = "Attended Late" if checkin_time > late_cutoff else "Attended"
-            responses.append({
-                "class": className,
-                "professor": professorName,
-                "status": status
-            })
-
+    status = "Attended Late" if checkin_time > late_cutoff else "Attended"
+    
     conn.commit()
     conn.close()
 
-    return jsonify({'status': 'success', 'entries': responses})
+    return jsonify({'status': 'success'})
 
 @app.route('/submit_end_location', methods=['POST'])
 def submit_end_location():
     print("📍 /submit_end_location called")
     data = request.json
-    email = data.get('email')
-    scannedEventID = int(data.get('scannedEventID'))
-    endLocation = str(data.get('endLocation'))
+    email = data['email']
+    scannedEventID = int(data['scannedEventID'])
+    endLocation = str(data['endLocation'])
     endTime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    lastName = data.get('lastName')
+    lastName = data['lastName']
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    try:
-        # 🔁 Update all matching rows that haven't been updated yet
-        cursor.execute('''
-            UPDATE student_checkins
-            SET endLocation = ?, endTime = ?
-            WHERE email = ? AND scannedEventID = ? AND lastName = ?
-              AND (endLocation IS NULL OR endLocation = '')
-        ''', (endLocation, endTime, email, scannedEventID, lastName))
+    cursor.execute('''
+        UPDATE student_checkins
+        SET endLocation = ?, endTime = ?
+        WHERE email = ? AND scannedEventID = ? AND lastName = ?
+    ''', (endLocation, endTime, email, scannedEventID, lastName))
 
-        updated_count = cursor.rowcount
-        conn.commit()
-        print(f"✅ Updated {updated_count} rows with end location.")
+    conn.commit()
+    conn.close()
 
-        return jsonify({'status': 'success', 'updated': updated_count})
-    except Exception as e:
-        print(f"❌ Error updating end location: {e}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-    finally:
-        conn.close()
+    return jsonify({'status': 'success'})
 
 # **Functions for Generating and Sending Emails to Professors Post-Event**
 def haversine_distance(lat1, lon1, lat2, lon2):
@@ -493,10 +614,10 @@ def construct_email_records(event_id):
     return emails
 
 def send_professor_emails(event_id):
-    print(f"[🚨 EMAIL JOB STARTED] Event ID: {event_id}")
     """
     Send emails to professors with a summary of student attendance records.
     """
+    print(f"[🚨 EMAIL JOB STARTED] Event ID: {event_id}")
     emails = construct_email_records(event_id)
     print(f"[🗃 EMAIL DATA] Found {len(emails)} professors for Event ID {event_id}")
     professors = emails.keys()
@@ -654,16 +775,9 @@ def submit_event():
     cursor = conn.cursor()
     cursor.execute("""
         SELECT * FROM events 
-        WHERE eventDate = ? 
-        AND ROUND(latitude, 6) = ROUND(?, 6) 
-        AND ROUND(longitude, 6) = ROUND(?, 6)
-        AND (
-            (? BETWEEN startTime AND stopTime) OR 
-            (? BETWEEN startTime AND stopTime) OR 
-            (startTime BETWEEN ? AND ?)
-        )
-    """, (event_date, lat, lng, start_time, stop_time, start_time, stop_time))
-
+        WHERE eventDate = ? AND startTime = ? AND stopTime = ? 
+        AND ROUND(latitude, 6) = ROUND(?, 6) AND ROUND(longitude, 6) = ROUND(?, 6)
+    """, (event_date, start_time, stop_time, lat, lng))
     same_time_place = cursor.fetchone()
 
     if same_time_place:
@@ -777,27 +891,22 @@ def get_places():
 
 @app.route('/find_student', methods=['GET', 'POST'])
 def find_student():
-    students = None
+    students = None  # Ensure we differentiate between no search and empty results
 
     if request.method == 'POST':
-        first_name = request.form['first_name'].strip().lower()
-        last_name = request.form['last_name'].strip().lower()
+        first_name = request.form['first_name'].strip()
+        last_name = request.form['last_name'].strip()
 
-        if first_name or last_name:
+        if first_name or last_name:  # Ensure at least one field is filled
             conn = get_db_connection()
             cursor = conn.cursor()
 
             query = '''
-            SELECT sc.*, e.eventName, e.startTime, e.stopTime
-            FROM student_checkins sc
-            LEFT JOIN events e ON sc.scannedEventID = e.eventID
-            WHERE (? != '' AND LOWER(sc.firstName) LIKE ?)
-               OR (? != '' AND LOWER(sc.lastName) LIKE ?)
+            SELECT * FROM student_checkins 
+            WHERE (firstName LIKE ? OR lastName LIKE ?)
             '''
-            params = [
-                first_name, f'%{first_name}%',
-                last_name, f'%{last_name}%'
-            ]
+
+            params = [f'%{first_name}%', f'%{last_name}%']
 
             cursor.execute(query, params)
             students = cursor.fetchall()
@@ -805,66 +914,10 @@ def find_student():
 
     return render_template('find_student.html', students=students)
 
-
 @app.route("/test_email/<int:event_id>")
 def test_send_professor_email(event_id):
     send_professor_emails(event_id)
     return f"Triggered professor email manually for event {event_id}"
-
-@app.route("/test_location_accuracy/<int:event_id>")
-def test_location_accuracy(event_id):
-    from flask import Response
-    output = []
-
-    conn = get_db_connection()
-
-    # Get event location
-    event = conn.execute('''
-        SELECT eventName, latitude, longitude
-        FROM events
-        WHERE eventID = ?
-    ''', (event_id,)).fetchone()
-
-    if not event:
-        return f"No event found with ID {event_id}", 404
-
-    event_name, event_lat, event_lon = event
-    output.append(f"🔍 Testing Check-in Distances for Event: {event_name} (ID: {event_id})<br><br>")
-
-    # Get student check-in data
-    results = conn.execute('''
-        SELECT firstName, lastName, email, startLocation, endLocation
-        FROM student_checkins
-        WHERE scannedEventID = ?
-    ''', (event_id,)).fetchall()
-
-    conn.close()
-
-    for row in results:
-        first_name, last_name, email, start_loc, end_loc = row
-        start_lat, start_lon = parse_location(start_loc) if start_loc else (None, None)
-        end_lat, end_lon = parse_location(end_loc) if end_loc else (None, None)
-
-        result_line = f"<b>{first_name} {last_name}</b> ({email}): "
-
-        if None in [start_lat, start_lon, end_lat, end_lon]:
-            result_line += "<span style='color:red;'>❌ Invalid location data</span><br>"
-        else:
-            dist_checkin = haversine_distance(event_lat, event_lon, start_lat, start_lon)
-            dist_checkout = haversine_distance(event_lat, event_lon, end_lat, end_lon)
-
-            checkin_ok = dist_checkin <= 100
-            checkout_ok = dist_checkout <= 100
-
-            result_line += f"Check-in: {dist_checkin:.2f}m | Check-out: {dist_checkout:.2f}m → "
-            if checkin_ok and checkout_ok:
-                result_line += "<span style='color:green;'>✅ Valid</span><br>"
-            else:
-                result_line += "<span style='color:orange;'>⚠️ Outside 100m</span><br>"
-
-        output.append(result_line)
-
-    return Response("".join(output), mimetype='text/html')
 
 if __name__ == "__main__":
     scheduler.start()
