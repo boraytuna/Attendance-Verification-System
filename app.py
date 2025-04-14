@@ -69,6 +69,8 @@ def create_tables():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             userID INTEGER PRIMARY KEY AUTOINCREMENT,
+            first_name TEXT NOT NULL,
+            last_name TEXT NOT NULL,
             email TEXT NOT NULL,
             password TEXT NOT NULL
         )
@@ -151,6 +153,8 @@ def submit_signup():
     API route to handle user signup.
     """
     data = request.json
+    first_name = data.get('first_name')
+    last_name = data.get('last_name')
     email = data.get('email')
     password = sha256_crypt.encrypt(data.get('password'))
 
@@ -159,8 +163,7 @@ def submit_signup():
         # first check if account with email already exists
         user = conn.cursor().execute('''
             SELECT * FROM users WHERE email = ?
-            ''', (email,)
-        ).fetchone()
+        ''', (email,)).fetchone()
 
         if user is not None:
             return jsonify({
@@ -169,9 +172,9 @@ def submit_signup():
             })
         else:
             conn.cursor().execute('''
-                INSERT INTO users (email, password) VALUES (?, ?)
-                ''', (email, password)
-            )
+                INSERT INTO users (first_name, last_name, email, password)
+                VALUES (?, ?, ?, ?)
+            ''', (first_name, last_name, email, password))
             conn.commit()
 
             return jsonify({
@@ -186,16 +189,6 @@ def submit_signup():
     finally:
         conn.close()
 
-@app.route("/login")
-def login():
-    """
-    Flask route rendering for the login page.
-
-    Returns:
-        the rendered login page HTML template
-    """
-    return render_template("login.html")
-
 @app.route("/submit_login", methods=["POST"])
 def submit_login():
     """
@@ -204,13 +197,12 @@ def submit_login():
     data = request.json
     email = data.get('email')
     password = data.get('password')
-    
+
     conn = get_db_connection()
     try:
         user = conn.cursor().execute('''
             SELECT * FROM users WHERE email = ?
-            ''', (email,)
-        ).fetchone()
+        ''', (email,)).fetchone()
     except sqlite3.Error as e:
         return jsonify({
             "success": False,
@@ -220,14 +212,15 @@ def submit_login():
         conn.close()
 
     if user is None:
-       return jsonify({
+        return jsonify({
             "success": False,
             "message": "No account exists with this email."
         })
-    elif sha256_crypt.verify(password, user[2]):
-        # store userID and email in session
+    elif sha256_crypt.verify(password, user[4]):  # assuming index 4 = password
         session['user_id'] = user[0]
-        session['user_email'] = user[1]
+        session['user_email'] = user[3]
+        session['first_name'] = user[1]
+        session['last_name'] = user[2]
         return jsonify({
             "success": True,
             "message": "Login successful."
@@ -237,6 +230,16 @@ def submit_login():
             "success": False,
             "message": "Incorrect password."
         })
+
+@app.route("/login")
+def login():
+    """
+    Flask route rendering for the login page.
+
+    Returns:
+        the rendered login page HTML template
+    """
+    return render_template("login.html")
 
 @app.route("/dashboard")
 def dashboard():
@@ -283,11 +286,6 @@ def events():
 def calendar():
     return render_template("calendar.html")
 
-# # Route: Find Student Page
-# @app.route("/find_student")
-# def find_student():
-#     return render_template("find_student.html")
-
 # Route: Places Page
 @app.route("/places")
 def places():
@@ -297,6 +295,42 @@ def places():
     places = cursor.fetchall()
     conn.close()
     return render_template("places.html", places=places)
+
+
+@app.route('/account', methods=['GET', 'POST'])
+def account():
+    if 'user_email' not in session:
+        return redirect(url_for('login'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # fetch full user info
+    cursor.execute("""
+        SELECT first_name, last_name, email, password FROM users WHERE email = ?
+    """, (session['user_email'],))
+    user = cursor.fetchone()
+
+    if request.method == 'POST':
+        new_password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+
+        if new_password != confirm_password:
+            flash("❌ Passwords do not match.")
+        else:
+            encrypted = sha256_crypt.hash(new_password)
+            cursor.execute("""
+                UPDATE users SET password = ? WHERE email = ?
+            """, (encrypted, session['user_email']))
+            conn.commit()
+            conn.close()
+
+            flash("✅ Password updated successfully. Please log in again.")
+            session.clear()  # force logout
+            return redirect(url_for('login'))
+
+    conn.close()
+    return render_template('account.html', user=user)
 
 # Function to generate (or retrieve) QR code
 def get_or_create_qr_code(event_id):
@@ -405,8 +439,6 @@ def search_professors():
     results = cursor.fetchall()
     conn.close()
     return jsonify([row[0] for row in results])
-
-ENFORCE_DEVICE_ID = True  # You can toggle this off to disable device restriction
 
 @app.route('/submit_student_checkin', methods=['POST'])
 def submit_student_checkin():
@@ -886,61 +918,6 @@ def find_student():
 def test_send_professor_email(event_id):
     send_professor_emails(event_id)
     return f"Triggered professor email manually for event {event_id}"
-
-@app.route("/test_location_accuracy/<int:event_id>")
-def test_location_accuracy(event_id):
-    from flask import Response
-    output = []
-
-    conn = get_db_connection()
-
-    # Get event location
-    event = conn.execute('''
-        SELECT eventName, latitude, longitude
-        FROM events
-        WHERE eventID = ?
-    ''', (event_id,)).fetchone()
-
-    if not event:
-        return f"No event found with ID {event_id}", 404
-
-    event_name, event_lat, event_lon = event
-    output.append(f"🔍 Testing Check-in Distances for Event: {event_name} (ID: {event_id})<br><br>")
-
-    # Get student check-in data
-    results = conn.execute('''
-        SELECT firstName, lastName, email, startLocation, endLocation
-        FROM student_checkins
-        WHERE scannedEventID = ?
-    ''', (event_id,)).fetchall()
-
-    conn.close()
-
-    for row in results:
-        first_name, last_name, email, start_loc, end_loc = row
-        start_lat, start_lon = parse_location(start_loc) if start_loc else (None, None)
-        end_lat, end_lon = parse_location(end_loc) if end_loc else (None, None)
-
-        result_line = f"<b>{first_name} {last_name}</b> ({email}): "
-
-        if None in [start_lat, start_lon, end_lat, end_lon]:
-            result_line += "<span style='color:red;'>❌ Invalid location data</span><br>"
-        else:
-            dist_checkin = haversine_distance(event_lat, event_lon, start_lat, start_lon)
-            dist_checkout = haversine_distance(event_lat, event_lon, end_lat, end_lon)
-
-            checkin_ok = dist_checkin <= 100
-            checkout_ok = dist_checkout <= 100
-
-            result_line += f"Check-in: {dist_checkin:.2f}m | Check-out: {dist_checkout:.2f}m → "
-            if checkin_ok and checkout_ok:
-                result_line += "<span style='color:green;'>✅ Valid</span><br>"
-            else:
-                result_line += "<span style='color:orange;'>⚠️ Outside 100m</span><br>"
-
-        output.append(result_line)
-
-    return Response("".join(output), mimetype='text/html')
 
 if __name__ == "__main__":
     scheduler.start()

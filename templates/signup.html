@@ -12,6 +12,14 @@
         <p class="failed-message" id="failed-message" style="margin:0; padding:0;"></p>
     </div>
     <form class="form-container">
+        <label for="first_name">First Name</label>
+        <div class="input-container">
+            <input type="text" id="first_name" name="first_name" placeholder="First Name" required>
+        </div>
+        <label for="last_name">Last Name</label>
+        <div class="input-container">
+            <input type="text" id="last_name" name="last_name" placeholder="Last Name" required>
+        </div>
         <label for="email">Email</label>
         <div class="input-container">
             <i class="fa-regular fa-user"></i>
@@ -33,6 +41,8 @@
     document.getElementById("submitSignup").addEventListener("click", function() {
         let email = document.getElementById("email").value;
         let password = document.getElementById("password").value;
+        let first_name = document.getElementById("first_name").value;
+        let last_name = document.getElementById("last_name").value;
 
         if (email) {
             fetch("/submit_signup", {
@@ -41,6 +51,8 @@
                     "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
+                    first_name: first_name,
+                    last_name: last_name,
                     email: email,
                     password: password
                 })

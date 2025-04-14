@@ -1,0 +1,146 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<style>
+    .account-container {
+        max-width: 600px;
+        margin: 40px auto;
+        background-color: #ffffff;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+    }
+
+    h1 {
+        text-align: center;
+        color: #0056b3;
+        margin-bottom: 20px;
+    }
+
+    label {
+        font-weight: bold;
+        display: block;
+        margin-top: 15px;
+    }
+
+    input {
+        padding: 10px;
+        width: 100%;
+        margin-top: 5px;
+        margin-bottom: 15px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        box-sizing: border-box;
+    }
+
+    .password-wrapper {
+        position: relative;
+    }
+
+    .password-wrapper button {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: none;
+        border: none;
+        font-size: 14px;
+        cursor: pointer;
+    }
+
+    button[type="submit"] {
+        background-color: #0056b3;
+        color: white;
+        padding: 10px 20px;
+        width: 100%;
+        border: none;
+        border-radius: 5px;
+        font-size: 16px;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+    }
+
+    button[type="submit"]:hover {
+        background-color: #004494;
+    }
+
+    .message {
+        background-color: #d4edda;
+        color: #155724;
+        padding: 10px;
+        border: 1px solid #c3e6cb;
+        border-radius: 5px;
+        text-align: center;
+        margin-bottom: 20px;
+    }
+
+    .error {
+        color: red;
+        font-size: 14px;
+        margin-top: -10px;
+        margin-bottom: 10px;
+    }
+</style>
+
+<div class="account-container">
+    <h1>👤 Account Settings</h1>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="message">
+            {{ messages[0] }}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <form method="POST" onsubmit="return validatePasswords()">
+    <label>First Name:</label>
+    <input type="text" value="{{ user['first_name'] }}" readonly>
+
+    <label>Last Name:</label>
+    <input type="text" value="{{ user['last_name'] }}" readonly>
+
+    <label>Email:</label>
+    <input type="email" value="{{ user['email'] }}" readonly>
+
+        <label for="password">New Password:</label>
+        <div class="password-wrapper">
+            <input type="password" name="password" id="password" placeholder="Enter new password" required>
+            <button type="button" onclick="togglePassword('password')">👁️</button>
+        </div>
+
+        <label for="confirm_password">Confirm New Password:</label>
+        <div class="password-wrapper">
+            <input type="password" name="confirm_password" id="confirm_password" placeholder="Confirm new password" required>
+            <button type="button" onclick="togglePassword('confirm_password')">👁️</button>
+        </div>
+
+        <p class="error" id="password_error" style="display: none;"></p>
+
+        <button type="submit">Update Password</button>
+    </form>
+</div>
+
+<script>
+    function togglePassword(fieldId) {
+        const field = document.getElementById(fieldId);
+        field.type = field.type === "password" ? "text" : "password";
+    }
+
+    function validatePasswords() {
+        const password = document.getElementById("password").value;
+        const confirm = document.getElementById("confirm_password").value;
+        const errorText = document.getElementById("password_error");
+
+        if (password !== confirm) {
+            errorText.textContent = "❌ Passwords do not match.";
+            errorText.style.display = "block";
+            return false;
+        }
+
+        errorText.style.display = "none";
+        return true;
+    }
+</script>
+
+{% endblock %}

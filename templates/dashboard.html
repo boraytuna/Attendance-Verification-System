@@ -75,7 +75,7 @@
 <div class="dashboard-container">
     <h1>📊 Dashboard</h1>
 
-    <p>Welcome, {{ session['user_email'] }}!</p>
+    <p>Welcome, {{ session['first_name'] }} {{ session['last_name'] }}!</p>
 
     {% if request.args.get('success') == '1' %}
     <div id="success-message"
