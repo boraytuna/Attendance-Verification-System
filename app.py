@@ -131,8 +131,6 @@ def create_tables():
 # Ensure database tables exist
 create_tables()
 
-<<<<<<< HEAD
-=======
 def login_required(f):
     """
     Decorator that restricts access to a route unless the user is logged in.
@@ -145,7 +143,6 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
->>>>>>> Create-Account
 @app.route("/")
 def landing_page():
     """
@@ -273,32 +270,35 @@ def submit_logout():
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    """
-    Flask route for the dashboard page.
-    
-    Returns:
-        the rendered dashboard page HTML template
-    """
-    if 'user_id' not in session:
-        return redirect(url_for("login"))
-
     user_id = session["user_id"]
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Upcoming events: future events created by this professor
+    # UPCOMING EVENTS — start time is in the future
     cursor.execute("""
         SELECT e.*, p.name AS place_name, p.building
         FROM events e
         LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
-        WHERE eventDate || 'T' || startTime >= ? AND professorID = ?
+        WHERE eventDate || 'T' || startTime > ? AND professorID = ?
         ORDER BY eventDate, startTime
     """, (now, user_id))
     upcoming = cursor.fetchall()
 
-    # Past events: past events created by this professor
+    # CURRENT EVENTS — now is between start and stop
+    cursor.execute("""
+        SELECT e.*, p.name AS place_name, p.building
+        FROM events e
+        LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
+        WHERE eventDate || 'T' || startTime <= ?
+          AND eventDate || 'T' || stopTime >= ?
+          AND professorID = ?
+        ORDER BY eventDate, startTime
+    """, (now, now, user_id))
+    current = cursor.fetchall()
+
+    # PAST EVENTS — stop time is in the past
     cursor.execute("""
         SELECT e.*, p.name AS place_name, p.building
         FROM events e
@@ -307,9 +307,10 @@ def dashboard():
         ORDER BY eventDate DESC, startTime DESC
     """, (now, user_id))
     past = cursor.fetchall()
-    
+
     conn.close()
     return render_template("dashboard.html", upcoming_events=upcoming, current_events=current, past_events=past)
+
 # Route: Events Page
 @app.route("/events", methods=["GET"])
 @login_required
@@ -983,9 +984,5 @@ def test_send_professor_email(event_id):
     return f"Triggered professor email manually for event {event_id}"
 
 if __name__ == "__main__":
-<<<<<<< HEAD
-=======
-    #scheduler.start()
->>>>>>> Create-Account
     reschedule_pending_emails()
     app.run(debug=True)
