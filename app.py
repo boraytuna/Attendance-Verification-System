@@ -12,6 +12,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import passlib, passlib.hash
 from passlib.hash import sha256_crypt
 
+
 app = Flask(__name__)
 
 DATABASE_NAME = "attendance.db"
@@ -946,6 +947,5 @@ def test_send_professor_email(event_id):
     return f"Triggered professor email manually for event {event_id}"
 
 if __name__ == "__main__":
-    scheduler.start()
     reschedule_pending_emails()
     app.run(debug=True)
