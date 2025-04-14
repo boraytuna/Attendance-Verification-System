@@ -254,6 +254,16 @@ def login():
     """
     return render_template("login.html")
 
+@app.route("/submit_logout", methods=["POST"])
+def submit_logout():
+    """
+    """
+    # clear all session storage
+    session.clear()
+
+    # redirect to the landing page
+    return redirect(url_for("landing_page"))
+
 @app.route("/dashboard")
 @login_required
 def dashboard():
