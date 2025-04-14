@@ -5,6 +5,7 @@ import os
 import segno
 import random
 import math
+import requests
 from datetime import datetime, timedelta
 from geopy.distance import geodesic
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -137,10 +138,20 @@ def dashboard():
         SELECT e.*, p.name AS place_name, p.building
         FROM events e
         LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
-        WHERE eventDate || 'T' || startTime >= ?
+        WHERE eventDate || 'T' || startTime > ?
         ORDER BY eventDate, startTime
     """, (now,))
     upcoming = cursor.fetchall()
+
+    # Current events: now is between start and stop(Olu)
+    cursor.execute("""
+        SELECT e.*, p.name AS place_name, p.building
+        FROM events e
+        LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
+        WHERE eventDate || 'T' || startTime <= ? AND eventDate || 'T' || stopTime >= ?
+        ORDER BY eventDate, startTime
+    """, (now, now))
+    current = cursor.fetchall()
 
     # Past events: event has already ended
     cursor.execute("""
@@ -151,10 +162,9 @@ def dashboard():
         ORDER BY eventDate DESC, startTime DESC
     """, (now,))
     past = cursor.fetchall()
-
+    
     conn.close()
-    return render_template("dashboard.html", upcoming_events=upcoming, past_events=past)
-
+    return render_template("dashboard.html", upcoming_events=upcoming, current_events=current, past_events=past)
 # Route: Events Page
 @app.route("/events", methods=["GET"])
 def events():
@@ -635,23 +645,24 @@ def submit_event():
     start_time = request.form["start_time"]
     stop_time = request.form["stop_time"]
     event_location = request.form["event_location"]
-    event_address = request.form.get("event_address", "Unknown Location")
+    event_address = request.form.get("event_address", "").strip()
 
-    # NEW: Parse location
+    # Parse lat/lng
     try:
         lat, lng = map(float, event_location.split(","))
     except ValueError:
         flash("❌ Invalid location format.", "error")
         return redirect(url_for("events"))
 
-    # NEW: Validate time logic
+    # Time validation
     if start_time >= stop_time:
         flash("❌ End time must be later than start time.", "error")
         return redirect(url_for("events"))
 
-    # NEW: Prevent duplicate event at same time/location
     conn = get_db_connection()
     cursor = conn.cursor()
+
+    # Prevent duplicate events at same location & overlapping time
     cursor.execute("""
         SELECT * FROM events 
         WHERE eventDate = ? 
@@ -660,47 +671,55 @@ def submit_event():
         AND (
             (? BETWEEN startTime AND stopTime) OR 
             (? BETWEEN startTime AND stopTime) OR 
-            (startTime BETWEEN ? AND ?)
+            (startTime BETWEEN ? AND ?) OR 
+            (stopTime BETWEEN ? AND ?)
         )
-    """, (event_date, lat, lng, start_time, stop_time, start_time, stop_time))
+    """, (
+        event_date, lat, lng,
+        start_time, stop_time, start_time, stop_time, start_time, stop_time
+    ))
 
-    same_time_place = cursor.fetchone()
-
-    if same_time_place:
+    if cursor.fetchone():
         conn.close()
         flash("❌ Another event is already scheduled at this time and location.", "error")
         return redirect(url_for("events"))
 
-    # SAFE TO INSERT
-    cursor.execute('''
+    # Fallback to reverse geocoding if no event address provided
+    if not event_address or event_address == "Unknown Location":
+        geocode_url = f"https://maps.googleapis.com/maps/api/geocode/json?latlng={lat},{lng}&key={GOOGLE_API_KEY}"
+        response = requests.get(geocode_url).json()
+
+        if response["status"] == "OK" and response["results"]:
+            event_address = response["results"][0]["formatted_address"]
+        else:
+            event_address = "Unknown Location"
+
+    # Insert event
+    cursor.execute("""
         INSERT INTO events (eventName, eventDate, startTime, stopTime, latitude, longitude, eventAddress)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', (event_name, event_date, start_time, stop_time, lat, lng, event_address))
+    """, (event_name, event_date, start_time, stop_time, lat, lng, event_address))
+
     event_id = cursor.lastrowid
     conn.commit()
     conn.close()
 
     get_or_create_qr_code(event_id)
 
-    # ✅ Schedule email 5 minutes after event ends
+    # Schedule professor email 5 mins after event ends
     try:
-        # Combine date and time from form
-        event_end_str = f"{event_date} {stop_time}"
-        event_end_dt = datetime.strptime(event_end_str, "%Y-%m-%d %H:%M")
-        executetime = event_end_dt + timedelta(minutes=5)
-
-        # Schedule the email with a unique job ID
+        event_end = datetime.strptime(f"{event_date} {stop_time}", "%Y-%m-%d %H:%M")
+        execute_time = event_end + timedelta(minutes=5)
         scheduler.add_job(
             func=send_professor_emails,
             trigger='date',
-            run_date=executetime,
+            run_date=execute_time,
             args=[event_id],
             id=f"professor_email_{event_id}",
             replace_existing=True
         )
-        print(f"Scheduled professor email for event {event_id}.")
     except Exception as e:
-        print(f"[SCHEDULER ERROR] Could not schedule professor email for event {event_id}: {e}")
+        print(f"[SCHEDULER ERROR] Could not schedule email: {e}")
 
     return redirect(url_for("dashboard", success=1))
 
