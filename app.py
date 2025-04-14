@@ -10,6 +10,7 @@ from geopy.distance import geodesic
 from apscheduler.schedulers.background import BackgroundScheduler
 import passlib, passlib.hash
 from passlib.hash import sha256_crypt
+from functools import wraps
 
 app = Flask(__name__)
 
@@ -127,6 +128,18 @@ def create_tables():
 # Ensure database tables exist
 create_tables()
 
+def login_required(f):
+    """
+    Decorator that restricts access to a route unless the user is logged in.
+    If a user is not logged in, they are redirected to the login page.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
 @app.route("/")
 def landing_page():
     """
@@ -242,7 +255,14 @@ def login():
     return render_template("login.html")
 
 @app.route("/dashboard")
+@login_required
 def dashboard():
+    """
+    Flask route for the dashboard page.
+    
+    Returns:
+        the rendered dashboard page HTML template
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -273,6 +293,7 @@ def dashboard():
 
 # Route: Events Page
 @app.route("/events", methods=["GET"])
+@login_required
 def events():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -283,11 +304,13 @@ def events():
 
 # Route: Calendar Page
 @app.route("/calendar")
+@login_required
 def calendar():
     return render_template("calendar.html")
 
 # Route: Places Page
 @app.route("/places")
+@login_required
 def places():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -298,6 +321,7 @@ def places():
 
 
 @app.route('/account', methods=['GET', 'POST'])
+@login_required
 def account():
     if 'user_email' not in session:
         return redirect(url_for('login'))
@@ -350,6 +374,7 @@ def get_or_create_qr_code(event_id):
 
 # Route: Serve QR Code
 @app.route("/qr_code/<int:event_id>")
+@login_required
 def serve_qr_code(event_id):
     qr_code_path = get_or_create_qr_code(event_id)
     return send_file(qr_code_path, mimetype="image/png")
@@ -750,6 +775,7 @@ def reschedule_pending_emails():
     conn.close()
 
 @app.route("/submit_event", methods=["POST"])
+@login_required
 def submit_event():
     event_name = request.form["event_name"]
     event_date = request.form["event_date"]
@@ -820,6 +846,7 @@ def submit_event():
 
 # Route: API endpoint for event list (returns JSON)
 @app.route("/api/events", methods=["GET"])
+@login_required
 def get_events():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -847,6 +874,7 @@ def get_events():
     return jsonify(formatted_events)
 
 @app.route("/submit_place", methods=["POST"])
+@login_required
 def submit_place():
     data = request.json
     name = data.get("name")
@@ -871,6 +899,7 @@ def submit_place():
 
 # Route: Fetch all places
 @app.route("/api/places", methods=["GET"])
+@login_required
 def get_places():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -890,6 +919,7 @@ def get_places():
     return jsonify(places_list)
 
 @app.route('/find_student', methods=['GET', 'POST'])
+@login_required
 def find_student():
     students = None  # Ensure we differentiate between no search and empty results
 
