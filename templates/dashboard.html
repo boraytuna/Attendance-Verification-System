@@ -83,6 +83,8 @@
 
     <p>Welcome, {{ session['first_name'] }} {{ session['last_name'] }}!</p>
 
+    <p>Welcome, {{ session['first_name'] }} {{ session['last_name'] }}!</p>
+
     {% if request.args.get('success') == '1' %}
     <div class="flash-message"
         style="background-color: #d4edda; color: #155724; padding: 12px; border: 1px solid #c3e6cb; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">

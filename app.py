@@ -11,7 +11,7 @@ from geopy.distance import geodesic
 from apscheduler.schedulers.background import BackgroundScheduler
 import passlib, passlib.hash
 from passlib.hash import sha256_crypt
-
+from functools import wraps
 
 app = Flask(__name__)
 
@@ -23,7 +23,8 @@ app.secret_key = os.urandom(24)
 
 #scheduler for scheduling professor attendance emails
 scheduler = BackgroundScheduler()
-scheduler.start()
+if not scheduler.running:
+    scheduler.start()
 
 ENFORCE_DEVICE_ID = True  # Can toggle off for testing or relaxed events
 
@@ -88,7 +89,8 @@ def create_tables():
             stopTime TIME NOT NULL,
             latitude REAL NOT NULL,
             longitude REAL NOT NULL,
-            eventAddress TEXT NOT NULL
+            eventAddress TEXT NOT NULL,
+            professorID INTEGER NOT NULL
         )
     ''')
 
@@ -129,6 +131,21 @@ def create_tables():
 # Ensure database tables exist
 create_tables()
 
+<<<<<<< HEAD
+=======
+def login_required(f):
+    """
+    Decorator that restricts access to a route unless the user is logged in.
+    If a user is not logged in, they are redirected to the login page.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+>>>>>>> Create-Account
 @app.route("/")
 def landing_page():
     """
@@ -243,47 +260,59 @@ def login():
     """
     return render_template("login.html")
 
+@app.route("/submit_logout", methods=["POST"])
+def submit_logout():
+    """
+    """
+    # clear all session storage
+    session.clear()
+
+    # redirect to the landing page
+    return redirect(url_for("landing_page"))
+
 @app.route("/dashboard")
+@login_required
 def dashboard():
+    """
+    Flask route for the dashboard page.
+    
+    Returns:
+        the rendered dashboard page HTML template
+    """
+    if 'user_id' not in session:
+        return redirect(url_for("login"))
+
+    user_id = session["user_id"]
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-
-    # Upcoming events: event start is in the future
+    # Upcoming events: future events created by this professor
     cursor.execute("""
         SELECT e.*, p.name AS place_name, p.building
         FROM events e
         LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
-        WHERE eventDate || 'T' || startTime > ?
+        WHERE eventDate || 'T' || startTime >= ? AND professorID = ?
         ORDER BY eventDate, startTime
-    """, (now,))
+    """, (now, user_id))
     upcoming = cursor.fetchall()
 
-    # Current events: now is between start and stop(Olu)
+    # Past events: past events created by this professor
     cursor.execute("""
         SELECT e.*, p.name AS place_name, p.building
         FROM events e
         LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
-        WHERE eventDate || 'T' || startTime <= ? AND eventDate || 'T' || stopTime >= ?
-        ORDER BY eventDate, startTime
-    """, (now, now))
-    current = cursor.fetchall()
-
-    # Past events: event has already ended
-    cursor.execute("""
-        SELECT e.*, p.name AS place_name, p.building
-        FROM events e
-        LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
-        WHERE eventDate || 'T' || stopTime < ?
+        WHERE eventDate || 'T' || stopTime < ? AND professorID = ?
         ORDER BY eventDate DESC, startTime DESC
-    """, (now,))
+    """, (now, user_id))
     past = cursor.fetchall()
     
     conn.close()
     return render_template("dashboard.html", upcoming_events=upcoming, current_events=current, past_events=past)
 # Route: Events Page
 @app.route("/events", methods=["GET"])
+@login_required
 def events():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -294,11 +323,13 @@ def events():
 
 # Route: Calendar Page
 @app.route("/calendar")
+@login_required
 def calendar():
     return render_template("calendar.html")
 
 # Route: Places Page
 @app.route("/places")
+@login_required
 def places():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -309,6 +340,7 @@ def places():
 
 
 @app.route('/account', methods=['GET', 'POST'])
+@login_required
 def account():
     if 'user_email' not in session:
         return redirect(url_for('login'))
@@ -361,6 +393,7 @@ def get_or_create_qr_code(event_id):
 
 # Route: Serve QR Code
 @app.route("/qr_code/<int:event_id>")
+@login_required
 def serve_qr_code(event_id):
     qr_code_path = get_or_create_qr_code(event_id)
     return send_file(qr_code_path, mimetype="image/png")
@@ -761,22 +794,24 @@ def reschedule_pending_emails():
     conn.close()
 
 @app.route("/submit_event", methods=["POST"])
+@login_required
 def submit_event():
     event_name = request.form["event_name"]
     event_date = request.form["event_date"]
     start_time = request.form["start_time"]
     stop_time = request.form["stop_time"]
     event_location = request.form["event_location"]
-    event_address = request.form.get("event_address", "").strip()
+    event_address = request.form.get("event_address", "Unknown Location")
+    professor_id = session.get("user_id")  # NEW: Associate with logged-in professor
 
-    # Parse lat/lng
+    # Parse location
     try:
         lat, lng = map(float, event_location.split(","))
     except ValueError:
         flash("❌ Invalid location format.", "error")
         return redirect(url_for("events"))
 
-    # Time validation
+    # Validate time logic
     if start_time >= stop_time:
         flash("❌ End time must be later than start time.", "error")
         return redirect(url_for("events"))
@@ -784,7 +819,7 @@ def submit_event():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Prevent duplicate events at same location & overlapping time
+    # Check for duplicate event
     cursor.execute("""
         SELECT * FROM events 
         WHERE eventDate = ? 
@@ -806,32 +841,25 @@ def submit_event():
         flash("❌ Another event is already scheduled at this time and location.", "error")
         return redirect(url_for("events"))
 
-    # Fallback to reverse geocoding if no event address provided
-    if not event_address or event_address == "Unknown Location":
-        geocode_url = f"https://maps.googleapis.com/maps/api/geocode/json?latlng={lat},{lng}&key={GOOGLE_API_KEY}"
-        response = requests.get(geocode_url).json()
-
-        if response["status"] == "OK" and response["results"]:
-            event_address = response["results"][0]["formatted_address"]
-        else:
-            event_address = "Unknown Location"
-
-    # Insert event
-    cursor.execute("""
-        INSERT INTO events (eventName, eventDate, startTime, stopTime, latitude, longitude, eventAddress)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (event_name, event_date, start_time, stop_time, lat, lng, event_address))
-
+    # Insert event (✅ includes professorID now)
+    cursor.execute('''
+        INSERT INTO events (
+            eventName, eventDate, startTime, stopTime,
+            latitude, longitude, eventAddress, professorID
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (event_name, event_date, start_time, stop_time, lat, lng, event_address, professor_id))
     event_id = cursor.lastrowid
     conn.commit()
     conn.close()
 
     get_or_create_qr_code(event_id)
 
-    # Schedule professor email 5 mins after event ends
+    # Schedule professor email 5 minutes after event ends
     try:
-        event_end = datetime.strptime(f"{event_date} {stop_time}", "%Y-%m-%d %H:%M")
-        execute_time = event_end + timedelta(minutes=5)
+        event_end_str = f"{event_date} {stop_time}"
+        event_end_dt = datetime.strptime(event_end_str, "%Y-%m-%d %H:%M")
+        executetime = event_end_dt + timedelta(minutes=5)
+
         scheduler.add_job(
             func=send_professor_emails,
             trigger='date',
@@ -847,18 +875,23 @@ def submit_event():
 
 # Route: API endpoint for event list (returns JSON)
 @app.route("/api/events", methods=["GET"])
+@login_required
 def get_events():
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT eventID, eventName, eventDate, startTime, stopTime, latitude, longitude, eventAddress FROM events")
+
+    cursor.execute("""
+        SELECT eventID, eventName, eventDate, startTime, stopTime,
+               latitude, longitude, eventAddress
+        FROM events
+    """)
     events = cursor.fetchall()
     conn.close()
+
     formatted_events = []
     for event in events:
-        # Convert to dictionary (assuming events is a list of tuples)
         event_dict = dict(event)
 
-        # Combine date and time for FullCalendar's required format
         start_datetime = f"{event_dict['eventDate']}T{event_dict['startTime']}"
         end_datetime = f"{event_dict['eventDate']}T{event_dict['stopTime']}" if event_dict["stopTime"] else None
 
@@ -874,6 +907,7 @@ def get_events():
     return jsonify(formatted_events)
 
 @app.route("/submit_place", methods=["POST"])
+@login_required
 def submit_place():
     data = request.json
     name = data.get("name")
@@ -898,6 +932,7 @@ def submit_place():
 
 # Route: Fetch all places
 @app.route("/api/places", methods=["GET"])
+@login_required
 def get_places():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -917,6 +952,7 @@ def get_places():
     return jsonify(places_list)
 
 @app.route('/find_student', methods=['GET', 'POST'])
+@login_required
 def find_student():
     students = None  # Ensure we differentiate between no search and empty results
 
@@ -947,5 +983,9 @@ def test_send_professor_email(event_id):
     return f"Triggered professor email manually for event {event_id}"
 
 if __name__ == "__main__":
+<<<<<<< HEAD
+=======
+    #scheduler.start()
+>>>>>>> Create-Account
     reschedule_pending_emails()
     app.run(debug=True)
