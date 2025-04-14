@@ -30,6 +30,7 @@
         if (selectedValue) {
             var [lat, lng] = selectedValue.split(",").map(Number);
             document.getElementById("event_location").value = `${lat},${lng}`;
+            document.getElementById("event_address").value = place.name + " (" + place.building + ")";
             locationError.style.display = "none";
         }
     }
