@@ -284,7 +284,20 @@ def events():
 # Route: Calendar Page
 @app.route("/calendar")
 def calendar():
-    return render_template("calendar.html")
+    conn = get_db_connection()
+    events = conn.execute("SELECT * FROM events").fetchall()
+    conn.close()
+
+    # Convert to a list of dicts if needed (e.g., for JSON compatibility)
+    event_list = []
+    for event in events:
+        event_list.append({
+            'title': event['eventName'],
+            'start': f"{event['eventDate']}T{event['startTime']}",
+            'end': f"{event['eventDate']}T{event['stopTime']}",
+        })
+
+    return render_template("calendar.html", events=event_list)
 
 # Route: Places Page
 @app.route("/places")
@@ -790,7 +803,40 @@ def submit_event():
         INSERT INTO events (eventName, eventDate, startTime, stopTime, latitude, longitude, eventAddress)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     ''', (event_name, event_date, start_time, stop_time, lat, lng, event_address))
+   
+
+    # Generate recurring dates
+    recurrence = request.form.get("recurrence", "none").lower()
+    event_date_obj = datetime.strptime(event_date, "%Y-%m-%d")
+    occurrences = [event_date_obj]
+    if recurrence in ["daily", "weekly", "monthly"]:
+        for i in range(1, 10):  # generate 10 future occurrences
+            if recurrence == "daily":
+                occurrences.append(event_date_obj + timedelta(days=i))
+            elif recurrence == "weekly":
+                occurrences.append(event_date_obj + timedelta(weeks=i))
+            elif recurrence == "monthly":
+                next_month = event_date_obj.month + i
+                year = event_date_obj.year + (next_month - 1) // 12
+                month = (next_month - 1) % 12 + 1
+                try:
+                    occurrences.append(event_date_obj.replace(year=year, month=month))
+                except ValueError:
+                    # skip invalid dates like February 30th
+                    continue
+
+    for date in occurrences[1:]:
+        cursor.execute('''
+            INSERT INTO events (eventName, eventDate, startTime, stopTime, latitude, longitude, eventAddress)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (event_name, date.strftime("%Y-%m-%d"), start_time, stop_time, lat, lng, event_address))
+
+
+        event_id = cursor.lastrowid
+        get_or_create_qr_code(event_id)
+
     event_id = cursor.lastrowid
+
     conn.commit()
     conn.close()
 
@@ -836,12 +882,14 @@ def get_events():
         end_datetime = f"{event_dict['eventDate']}T{event_dict['stopTime']}" if event_dict["stopTime"] else None
 
         formatted_events.append({
-            "id": event_dict["eventID"],
-            "title": event_dict["eventName"],
-            "start": start_datetime,
-            "end": end_datetime,
-            "location": event_dict["eventAddress"],
-            "longitude": event_dict["longitude"]
+            "eventID": event_dict["eventID"],
+            "eventName": event_dict["eventName"],
+            "eventDate": event_dict["eventDate"],
+            "startTime": start_datetime,
+            "stopTime":end_datetime,
+            "latitude": event_dict["latitude"],
+            "longitude": event_dict["longitude"],
+            "eventAddress": event_dict["eventAddress"]
         })
 
     return jsonify(formatted_events)
@@ -920,6 +968,5 @@ def test_send_professor_email(event_id):
     return f"Triggered professor email manually for event {event_id}"
 
 if __name__ == "__main__":
-    scheduler.start()
     reschedule_pending_emails()
     app.run(debug=True)
