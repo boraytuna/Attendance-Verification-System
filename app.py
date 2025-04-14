@@ -487,84 +487,99 @@ def search_professors():
 
 @app.route('/submit_student_checkin', methods=['POST'])
 def submit_student_checkin():
-    data = request.json
-    firstName = data['firstName']
-    lastName = data['lastName']
-    email = data['email']
-    scannedEventID = int(data['scannedEventID'])
-    studentLocation = str(data['studentLocation'])
-    deviceId = data.get('deviceId')
-    course_entries = data.get('courses', [])  # Expecting list of {className, professorName}
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'status': 'error', 'message': 'No data received'}), 400
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
+        # Extract fields safely
+        firstName = data.get('firstName', '').strip()
+        lastName = data.get('lastName', '').strip()
+        email = data.get('email', '').strip()
+        scannedEventID = data.get('scannedEventID')
+        studentLocation = data.get('studentLocation', '').strip()
+        deviceId = data.get('deviceId')
+        course_entries = data.get('courses', [])
 
-    # ✅ Optional device restriction
-    if ENFORCE_DEVICE_ID:
-        cursor.execute('''
-            SELECT 1 FROM student_checkins
-            WHERE scannedEventID = ? AND deviceId = ?
-        ''', (scannedEventID, deviceId))
-        if cursor.fetchone():
+        # Basic validation
+        if not all([firstName, lastName, email, scannedEventID, studentLocation]):
+            return jsonify({'status': 'error', 'message': 'Missing required student fields'}), 400
+
+        scannedEventID = int(scannedEventID)
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # ✅ Optional device restriction check
+        if ENFORCE_DEVICE_ID:
+            cursor.execute('''
+                SELECT 1 FROM student_checkins
+                WHERE scannedEventID = ? AND deviceId = ?
+            ''', (scannedEventID, deviceId))
+            if cursor.fetchone():
+                conn.close()
+                return jsonify({
+                    'status': 'error',
+                    'message': 'This device has already been used to check in for this event.'
+                }), 403
+
+        # Event info (for timestamp and grace logic)
+        cursor.execute('SELECT eventDate, startTime FROM events WHERE eventID = ?', (scannedEventID,))
+        event_row = cursor.fetchone()
+        if not event_row:
             conn.close()
-            return jsonify({
-                'status': 'error',
-                'message': 'This device has already been used to check in for this event.'
-            })
+            return jsonify({'status': 'error', 'message': 'Event not found'}), 404
 
-    # Fetch event start time once for timing logic
-    cursor.execute('SELECT eventDate, startTime FROM events WHERE eventID = ?', (scannedEventID,))
-    event_row = cursor.fetchone()
-    if not event_row:
+        event_start = datetime.strptime(f"{event_row['eventDate']} {event_row['startTime']}", "%Y-%m-%d %H:%M")
+        late_cutoff = event_start + timedelta(minutes=10)
+
+        responses = []
+
+        for entry in course_entries:
+            className = entry.get('className', '').strip()
+            professorName = entry.get('professorName', '').strip()
+
+            if not className or not professorName:
+                continue  # skip incomplete rows
+
+            # Insert the student check-in
+            cursor.execute('''
+                INSERT INTO student_checkins (
+                    firstName, lastName, email, classForExtraCredit,
+                    professorForExtraCredit, scannedEventID, studentLocation, deviceId
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                firstName, lastName, email, className,
+                professorName, scannedEventID, studentLocation, deviceId
+            ))
+
+            # Fetch timestamp to determine attendance status
+            cursor.execute('''
+                SELECT checkinID, checkinTime FROM student_checkins
+                WHERE email = ? AND scannedEventID = ? AND lastName = ?
+                AND classForExtraCredit = ? AND professorForExtraCredit = ?
+                ORDER BY checkinTime DESC LIMIT 1
+            ''', (email, scannedEventID, lastName, className, professorName))
+            result = cursor.fetchone()
+
+            if result:
+                checkin_time = datetime.strptime(result["checkinTime"], "%Y-%m-%d %H:%M:%S")
+                status = "Attended Late" if checkin_time > late_cutoff else "Attended"
+                responses.append({
+                    "class": className,
+                    "professor": professorName,
+                    "status": status
+                })
+
+        conn.commit()
         conn.close()
-        return jsonify({'status': 'error', 'message': 'Event not found'}), 404
 
-    event_start = datetime.strptime(f"{event_row['eventDate']} {event_row['startTime']}", "%Y-%m-%d %H:%M")
-    grace_period_minutes = 10
-    late_cutoff = event_start + timedelta(minutes=grace_period_minutes)
+        return jsonify({'status': 'success', 'entries': responses})
 
-    responses = []
-
-    for entry in course_entries:
-        className = entry.get('className')
-        professorName = entry.get('professorName')
-
-        if not className or not professorName:
-            continue  # skip if data is missing
-
-        # Insert student check-in
-        cursor.execute('''
-            INSERT INTO student_checkins (
-                firstName, lastName, email, classForExtraCredit,
-                professorForExtraCredit, scannedEventID, studentLocation, deviceId
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            firstName, lastName, email, className,
-            professorName, scannedEventID, studentLocation, deviceId
-        ))
-
-        # Fetch latest check-in row to get timestamp
-        cursor.execute('''
-            SELECT checkinID, checkinTime FROM student_checkins
-            WHERE email = ? AND scannedEventID = ? AND lastName = ?
-            AND classForExtraCredit = ? AND professorForExtraCredit = ?
-            ORDER BY checkinTime DESC LIMIT 1
-        ''', (email, scannedEventID, lastName, className, professorName))
-        result = cursor.fetchone()
-
-        if result:
-            checkin_time = datetime.strptime(result["checkinTime"], "%Y-%m-%d %H:%M:%S")
-            status = "Attended Late" if checkin_time > late_cutoff else "Attended"
-            responses.append({
-                "class": className,
-                "professor": professorName,
-                "status": status
-            })
-
-    conn.commit()
-    conn.close()
-
-    return jsonify({'status': 'success', 'entries': responses})
+    except Exception as e:
+        import traceback
+        print("🔥 Exception in /submit_student_checkin:", traceback.format_exc())
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/submit_end_location', methods=['POST'])
 def submit_end_location():
@@ -883,7 +898,7 @@ def submit_event():
     try:
         event_end_str = f"{event_date} {stop_time}"
         event_end_dt = datetime.strptime(event_end_str, "%Y-%m-%d %H:%M")
-        executetime = event_end_dt + timedelta(minutes=5)
+        execute_time = event_end_dt + timedelta(minutes=5)
 
         scheduler.add_job(
             func=send_professor_emails,
