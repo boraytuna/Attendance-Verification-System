@@ -984,7 +984,8 @@ def get_events():
 
     formatted_events = []
 
-    for event in fetch_events:
+    for event in events:
+
         event_dict = dict(event)
 
         # Base datetime
