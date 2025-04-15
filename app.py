@@ -1000,22 +1000,50 @@ def find_student():
         first_name = request.form['first_name'].strip()
         last_name = request.form['last_name'].strip()
 
-        if first_name or last_name:  # Ensure at least one field is filled
-            conn = get_db_connection()
-            cursor = conn.cursor()
+        conn = get_db_connection()
+        cursor = conn.cursor()
 
+        # Adjust query based on the search fields being filled
+        if first_name and last_name:
             query = '''
-            SELECT * FROM student_checkins 
-            WHERE (firstName LIKE ? OR lastName LIKE ?)
+            SELECT sc.*, e.eventName, e.startTime, e.stopTime 
+            FROM student_checkins sc
+            LEFT JOIN events e ON sc.scannedEventID = e.eventID
+            WHERE LOWER(sc.firstName) = LOWER(?) AND LOWER(sc.lastName) = LOWER(?)
             '''
+            params = [first_name, last_name]
+        elif first_name:
+            query = '''
+            SELECT sc.*, e.eventName, e.startTime, e.stopTime 
+            FROM student_checkins sc
+            LEFT JOIN events e ON sc.scannedEventID = e.eventID
+            WHERE LOWER(sc.firstName) = LOWER(?)
+            '''
+            params = [first_name]
+        elif last_name:
+            query = '''
+            SELECT sc.*, e.eventName, e.startTime, e.stopTime 
+            FROM student_checkins sc
+            LEFT JOIN events e ON sc.scannedEventID = e.eventID
+            WHERE LOWER(sc.lastName) = LOWER(?)
+            '''
+            params = [last_name]
+        else:
+            query = '''
+            SELECT sc.*, e.eventName, e.startTime, e.stopTime 
+            FROM student_checkins sc
+            LEFT JOIN events e ON sc.scannedEventID = e.eventID
+            '''  # Show all students if nothing is filled
 
-            params = [f'%{first_name}%', f'%{last_name}%']
-
-            cursor.execute(query, params)
-            students = cursor.fetchall()
-            conn.close()
+        cursor.execute(query, params)
+        students = cursor.fetchall()
+        conn.close()
 
     return render_template('find_student.html', students=students)
+
+
+
+
 
 @app.route("/test_email/<int:event_id>")
 def test_send_professor_email(event_id):
