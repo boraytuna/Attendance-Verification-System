@@ -124,6 +124,18 @@ document.addEventListener("DOMContentLoaded", function () {
                     let lon = position.coords.longitude;
                     let capturedStudentLocation = `${lat},${lon}`;
                     locationCaptured = true;
+
+                    // ✅ Insert this check
+                    cachedStudent.firstName = document.getElementById("firstName").value.trim();
+                    cachedStudent.lastName = document.getElementById("lastName").value.trim();
+                    cachedStudent.email = document.getElementById("studentEmail").value.trim();
+
+                    if (!cachedStudent.firstName || !cachedStudent.lastName || !cachedStudent.email) {
+                        alert("Missing student information. Please return to the start.");
+                        showFrame(0);
+                        return;
+                    }
+
                     submitStudentCheckin(capturedStudentLocation);
                 },
                 error => {
@@ -152,7 +164,7 @@ document.addEventListener("DOMContentLoaded", function () {
         });
 
         let formData = {
-            firstName: document.getElementById("firstName").value,
+            firstName: cachedStudent.firstName,
             lastName: cachedStudent.lastName,
             email: cachedStudent.email,
             scannedEventID: cachedStudent.scannedEventID,

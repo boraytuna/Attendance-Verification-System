@@ -15,11 +15,22 @@
         nav {
             background-color: #0056b3;
             width: 100%;
-            display: flex;
-            justify-content: space-around;
-            align-items: center;
+            height: 6rem;
+            display: block;
             padding: 15px 0;
             box-sizing: border-box;
+            border: 1px solid #0056b3;
+            border-radius: 5px;
+        }
+        nav ul {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            display: flex;
+            flex-direction: row;
+            justify-content: space-around;
+            align-items: center;
+            list-style: none;
         }
         nav a {
             color: white;
@@ -33,6 +44,43 @@
             background-color: #004494;
             text-decoration: none;
         }
+        #settings {
+            position: relative;
+        }
+        #settingsIcon {
+            width: 1.75rem;
+            height: 1.75rem;
+            background-color: #0056b3;
+            color: #ffffff;
+            border: none;
+            padding: 10px 20px;
+            font-size: 18px;
+            cursor: pointer;
+        }
+        #settingsIcon:hover {
+            background-color: #004494;
+        }
+        #settingsMenu {
+            position: absolute;
+            width: 270px;
+            top: 50px;
+            right: 0;
+            background-color: #ffffff;
+            border: 1px solid #ffffff;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+        }
+        #settingsMenu a {
+            display: block;
+            background-color: none;
+            color: #0056b3;
+            cursor: pointer;
+            border: none;
+        }
+        #settingsMenu a:hover {
+            background-color: #f0f0f0;
+        }
         .container {
             padding: 20px;
             text-align: center;
@@ -40,20 +88,50 @@
     </style>
 </head>
 <body>
-
-<nav>
-    <a href="/dashboard">Dashboard</a>
-    <a href="/events">Events</a>
-    <a href="/calendar">Calendar</a>
-    <a href="/find_student">Find Student</a>
-    <a href="/places">Places</a>
-</nav>
-
-
-<div class="container">
-    {% block content %}{% endblock %}
-</div>
-
+    <nav>
+        <ul>
+        <li><a href="/dashboard">Dashboard</a></li>
+        <li><a href="/events">Events</a></li>
+        <li><a href="/calendar">Calendar</a></li>
+        <li><a href="/find_student">Find Student</a></li>
+        <li><a href="/places">Places</a></li>
+        <li id="settings">
+            <img id="settingsIcon" src="{{ url_for('static', filename='images/settings-icon.svg') }}" alt="settings icon">
+            <div id="settingsMenu" style="display:none; text-align: right;">
+                <a href="/account">Account</a>
+                <a id="logout">Logout</a>
+            </div>
+        </li>
+    </ul>
+    </nav>
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
 </body>
+<script>
+    const settingsIcon = document.getElementById("settingsIcon");
+    const settingsMenu = document.getElementById("settingsMenu");
+
+    settingsIcon.addEventListener("click", function() {
+        if (settingsMenu.style.display === "none" || settingsMenu.style.display === "") {
+            settingsMenu.style.display = "block";
+        } else {
+            settingsMenu.style.display = "none";
+        }
+    });
+
+    document.getElementById("logout").addEventListener("click", function() {
+        fetch('/submit_logout', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        }).then(response => {
+            if (response.redirected) {
+                window.location.href = response.url;
+            }
+        });
+    });
+</script>
 </html>
 

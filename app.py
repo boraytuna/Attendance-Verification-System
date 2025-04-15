@@ -5,11 +5,13 @@ import os
 import segno
 import random
 import math
+import requests
 from datetime import datetime, timedelta
 from geopy.distance import geodesic
 from apscheduler.schedulers.background import BackgroundScheduler
 import passlib, passlib.hash
 from passlib.hash import sha256_crypt
+from functools import wraps
 
 app = Flask(__name__)
 
@@ -21,7 +23,8 @@ app.secret_key = os.urandom(24)
 
 #scheduler for scheduling professor attendance emails
 scheduler = BackgroundScheduler()
-scheduler.start()
+if not scheduler.running:
+    scheduler.start()
 
 ENFORCE_DEVICE_ID = True  # Can toggle off for testing or relaxed events
 
@@ -86,7 +89,8 @@ def create_tables():
             stopTime TIME NOT NULL,
             latitude REAL NOT NULL,
             longitude REAL NOT NULL,
-            eventAddress TEXT NOT NULL
+            eventAddress TEXT NOT NULL,
+            professorID INTEGER NOT NULL
         )
     ''')
 
@@ -126,6 +130,18 @@ def create_tables():
 
 # Ensure database tables exist
 create_tables()
+
+def login_required(f):
+    """
+    Decorator that restricts access to a route unless the user is logged in.
+    If a user is not logged in, they are redirected to the login page.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 @app.route("/")
 def landing_page():
@@ -241,38 +257,63 @@ def login():
     """
     return render_template("login.html")
 
+@app.route("/submit_logout", methods=["POST"])
+def submit_logout():
+    """
+    """
+    # clear all session storage
+    session.clear()
+
+    # redirect to the landing page
+    return redirect(url_for("landing_page"))
+
 @app.route("/dashboard")
+@login_required
 def dashboard():
+    user_id = session["user_id"]
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-
-    # Upcoming events: event start is in the future
+    # UPCOMING EVENTS — start time is in the future
     cursor.execute("""
         SELECT e.*, p.name AS place_name, p.building
         FROM events e
         LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
-        WHERE eventDate || 'T' || startTime >= ?
+        WHERE eventDate || 'T' || startTime > ? AND professorID = ?
         ORDER BY eventDate, startTime
-    """, (now,))
+    """, (now, user_id))
     upcoming = cursor.fetchall()
 
-    # Past events: event has already ended
+    # CURRENT EVENTS — now is between start and stop
     cursor.execute("""
         SELECT e.*, p.name AS place_name, p.building
         FROM events e
         LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
-        WHERE eventDate || 'T' || stopTime < ?
+        WHERE eventDate || 'T' || startTime <= ?
+          AND eventDate || 'T' || stopTime >= ?
+          AND professorID = ?
+        ORDER BY eventDate, startTime
+    """, (now, now, user_id))
+    current = cursor.fetchall()
+
+    # PAST EVENTS — stop time is in the past
+    cursor.execute("""
+        SELECT e.*, p.name AS place_name, p.building
+        FROM events e
+        LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
+        WHERE eventDate || 'T' || stopTime < ? AND professorID = ?
         ORDER BY eventDate DESC, startTime DESC
-    """, (now,))
+    """, (now, user_id))
     past = cursor.fetchall()
 
     conn.close()
-    return render_template("dashboard.html", upcoming_events=upcoming, past_events=past)
+    return render_template("dashboard.html", upcoming_events=upcoming, current_events=current, past_events=past)
 
 # Route: Events Page
 @app.route("/events", methods=["GET"])
+@login_required
 def events():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -283,6 +324,7 @@ def events():
 
 # Route: Calendar Page
 @app.route("/calendar")
+@login_required
 def calendar():
     conn = get_db_connection()
     events = conn.execute("SELECT * FROM events").fetchall()
@@ -301,6 +343,7 @@ def calendar():
 
 # Route: Places Page
 @app.route("/places")
+@login_required
 def places():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -311,6 +354,7 @@ def places():
 
 
 @app.route('/account', methods=['GET', 'POST'])
+@login_required
 def account():
     if 'user_email' not in session:
         return redirect(url_for('login'))
@@ -363,6 +407,7 @@ def get_or_create_qr_code(event_id):
 
 # Route: Serve QR Code
 @app.route("/qr_code/<int:event_id>")
+@login_required
 def serve_qr_code(event_id):
     qr_code_path = get_or_create_qr_code(event_id)
     return send_file(qr_code_path, mimetype="image/png")
@@ -455,93 +500,132 @@ def search_professors():
 
 @app.route('/submit_student_checkin', methods=['POST'])
 def submit_student_checkin():
-    data = request.json
-    firstName = data['firstName']
-    lastName = data['lastName']
-    email = data['email']
-    classForExtraCredit = data['classForExtraCredit']
-    professorForExtraCredit = data['professorForExtraCredit']
-    scannedEventID = int(data['scannedEventID'])
-    studentLocation = str(data['studentLocation'])
-    deviceId = data.get('deviceId')  # New field from frontend
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'status': 'error', 'message': 'No data received'}), 400
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
+        # Extract fields safely
+        firstName = data.get('firstName', '').strip()
+        lastName = data.get('lastName', '').strip()
+        email = data.get('email', '').strip()
+        scannedEventID = data.get('scannedEventID')
+        studentLocation = data.get('studentLocation', '').strip()
+        deviceId = data.get('deviceId')
+        course_entries = data.get('courses', [])
 
-    # ✅ Device restriction check (optional)
-    if ENFORCE_DEVICE_ID:
-        cursor.execute('''
-            SELECT 1 FROM student_checkins
-            WHERE scannedEventID = ? AND deviceId = ?
-        ''', (scannedEventID, deviceId))
-        if cursor.fetchone():
+        # Basic validation
+        if not all([firstName, lastName, email, scannedEventID, studentLocation]):
+            return jsonify({'status': 'error', 'message': 'Missing required student fields'}), 400
+
+        scannedEventID = int(scannedEventID)
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # ✅ Optional device restriction check
+        if ENFORCE_DEVICE_ID:
+            cursor.execute('''
+                SELECT 1 FROM student_checkins
+                WHERE scannedEventID = ? AND deviceId = ?
+            ''', (scannedEventID, deviceId))
+            if cursor.fetchone():
+                conn.close()
+                return jsonify({
+                    'status': 'error',
+                    'message': 'This device has already been used to check in for this event.'
+                }), 403
+
+        # Event info (for timestamp and grace logic)
+        cursor.execute('SELECT eventDate, startTime FROM events WHERE eventID = ?', (scannedEventID,))
+        event_row = cursor.fetchone()
+        if not event_row:
             conn.close()
-            return jsonify({
-                'status': 'error',
-                'message': 'This device has already been used to check in for this event.'
-            })
+            return jsonify({'status': 'error', 'message': 'Event not found'}), 404
 
-    # Insert student check-in
-    cursor.execute('''
-        INSERT INTO student_checkins (
-            firstName, lastName, email, classForExtraCredit,
-            professorForExtraCredit, scannedEventID, studentLocation, deviceId
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (
-        firstName, lastName, email, classForExtraCredit,
-        professorForExtraCredit, scannedEventID, studentLocation, deviceId
-    ))
+        event_start = datetime.strptime(f"{event_row['eventDate']} {event_row['startTime']}", "%Y-%m-%d %H:%M")
+        late_cutoff = event_start + timedelta(minutes=10)
 
-    # Get checkinID for this new row
-    cursor.execute('''
-        SELECT checkinID, checkinTime FROM student_checkins
-        WHERE email = ? AND scannedEventID = ? AND lastName = ?
-        ORDER BY checkinTime DESC LIMIT 1
-    ''', (email, scannedEventID, lastName))
-    result = cursor.fetchone()
+        responses = []
 
-    checkin_id = result["checkinID"]
-    checkin_time = datetime.strptime(result["checkinTime"], "%Y-%m-%d %H:%M:%S")
+        for entry in course_entries:
+            className = entry.get('className', '').strip()
+            professorName = entry.get('professorName', '').strip()
 
-    # Fetch event start time
-    cursor.execute('SELECT eventDate, startTime FROM events WHERE eventID = ?', (scannedEventID,))
-    event_row = cursor.fetchone()
-    event_start = datetime.strptime(f"{event_row['eventDate']} {event_row['startTime']}", "%Y-%m-%d %H:%M")
+            if not className or not professorName:
+                continue  # skip incomplete rows
 
-    # Determine attendance status based on grace period
-    grace_period_minutes = 10
-    late_cutoff = event_start + timedelta(minutes=grace_period_minutes)
+            # Insert the student check-in
+            cursor.execute('''
+                INSERT INTO student_checkins (
+                    firstName, lastName, email, classForExtraCredit,
+                    professorForExtraCredit, scannedEventID, studentLocation, deviceId
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                firstName, lastName, email, className,
+                professorName, scannedEventID, studentLocation, deviceId
+            ))
 
-    status = "Attended Late" if checkin_time > late_cutoff else "Attended"
-    
-    conn.commit()
-    conn.close()
+            # Fetch timestamp to determine attendance status
+            cursor.execute('''
+                SELECT checkinID, checkinTime FROM student_checkins
+                WHERE email = ? AND scannedEventID = ? AND lastName = ?
+                AND classForExtraCredit = ? AND professorForExtraCredit = ?
+                ORDER BY checkinTime DESC LIMIT 1
+            ''', (email, scannedEventID, lastName, className, professorName))
+            result = cursor.fetchone()
 
-    return jsonify({'status': 'success'})
+            if result:
+                checkin_time = datetime.strptime(result["checkinTime"], "%Y-%m-%d %H:%M:%S")
+                status = "Attended Late" if checkin_time > late_cutoff else "Attended"
+                responses.append({
+                    "class": className,
+                    "professor": professorName,
+                    "status": status
+                })
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({'status': 'success', 'entries': responses})
+
+    except Exception as e:
+        import traceback
+        print("🔥 Exception in /submit_student_checkin:", traceback.format_exc())
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/submit_end_location', methods=['POST'])
 def submit_end_location():
     print("📍 /submit_end_location called")
     data = request.json
-    email = data['email']
-    scannedEventID = int(data['scannedEventID'])
-    endLocation = str(data['endLocation'])
+    email = data.get('email')
+    scannedEventID = int(data.get('scannedEventID'))
+    endLocation = str(data.get('endLocation'))
     endTime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    lastName = data['lastName']
+    lastName = data.get('lastName')
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    cursor.execute('''
-        UPDATE student_checkins
-        SET endLocation = ?, endTime = ?
-        WHERE email = ? AND scannedEventID = ? AND lastName = ?
-    ''', (endLocation, endTime, email, scannedEventID, lastName))
+    try:
+        # 🔁 Update all matching rows that haven't been updated yet
+        cursor.execute('''
+            UPDATE student_checkins
+            SET endLocation = ?, endTime = ?
+            WHERE email = ? AND scannedEventID = ? AND lastName = ?
+              AND (endLocation IS NULL OR endLocation = '')
+        ''', (endLocation, endTime, email, scannedEventID, lastName))
 
-    conn.commit()
-    conn.close()
+        updated_count = cursor.rowcount
+        conn.commit()
+        print(f"✅ Updated {updated_count} rows with end location.")
 
-    return jsonify({'status': 'success'})
+        return jsonify({'status': 'success', 'updated': updated_count})
+    except Exception as e:
+        print(f"❌ Error updating end location: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    finally:
+        conn.close()
 
 # **Functions for Generating and Sending Emails to Professors Post-Event**
 def haversine_distance(lat1, lon1, lat2, lon2):
@@ -763,6 +847,7 @@ def reschedule_pending_emails():
     conn.close()
 
 @app.route("/submit_event", methods=["POST"])
+@login_required
 def submit_event():
     event_name = request.form["event_name"]
     event_date = request.form["event_date"]
@@ -778,37 +863,52 @@ def submit_event():
      # Convert date to datetime object
     event_date_obj = datetime.strptime(event_date, "%Y-%m-%d")
     
+    professor_id = session.get("user_id")  # NEW: Associate with logged-in professor
+
+    # Parse location
     try:
         lat, lng = map(float, event_location.split(","))
     except ValueError:
         flash("❌ Invalid location format.", "error")
         return redirect(url_for("events"))
 
-    # NEW: Validate time logic
+    # Validate time logic
     if start_time >= stop_time:
         flash("❌ End time must be later than start time.", "error")
         return redirect(url_for("events"))
 
-    # NEW: Prevent duplicate event at same time/location
     conn = get_db_connection()
     cursor = conn.cursor()
+
+    # Check for duplicate event
     cursor.execute("""
         SELECT * FROM events 
-        WHERE eventDate = ? AND startTime = ? AND stopTime = ? 
-        AND ROUND(latitude, 6) = ROUND(?, 6) AND ROUND(longitude, 6) = ROUND(?, 6)
-    """, (event_date, start_time, stop_time, lat, lng))
-    same_time_place = cursor.fetchone()
+        WHERE eventDate = ? 
+        AND ROUND(latitude, 6) = ROUND(?, 6) 
+        AND ROUND(longitude, 6) = ROUND(?, 6)
+        AND (
+            (? BETWEEN startTime AND stopTime) OR 
+            (? BETWEEN startTime AND stopTime) OR 
+            (startTime BETWEEN ? AND ?) OR 
+            (stopTime BETWEEN ? AND ?)
+        )
+    """, (
+        event_date, lat, lng,
+        start_time, stop_time, start_time, stop_time, start_time, stop_time
+    ))
 
-    if same_time_place:
+    if cursor.fetchone():
         conn.close()
         flash("❌ Another event is already scheduled at this time and location.", "error")
         return redirect(url_for("events"))
 
-    # SAFE TO INSERT
+    # Insert event (✅ includes professorID now)
     cursor.execute('''
-        INSERT INTO events (eventName, eventDate, startTime, stopTime, latitude, longitude, eventAddress)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', (event_name, event_date, start_time, stop_time, lat, lng, event_address))
+        INSERT INTO events (
+            eventName, eventDate, startTime, stopTime,
+            latitude, longitude, eventAddress, professorID
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (event_name, event_date, start_time, stop_time, lat, lng, event_address, professor_id))
    
 
     # Generate recurring dates
@@ -848,39 +948,38 @@ def submit_event():
 
     get_or_create_qr_code(event_id)
 
-    # ✅ Schedule email 5 minutes after event ends
+    # Schedule professor email 5 minutes after event ends
     try:
-        # Combine date and time from form
         event_end_str = f"{event_date} {stop_time}"
         event_end_dt = datetime.strptime(event_end_str, "%Y-%m-%d %H:%M")
-        executetime = event_end_dt + timedelta(minutes=5)
+        execute_time = event_end_dt + timedelta(minutes=5)
 
-        # Schedule the email with a unique job ID
         scheduler.add_job(
             func=send_professor_emails,
             trigger='date',
-            run_date=executetime,
+            run_date=execute_time,
             args=[event_id],
             id=f"professor_email_{event_id}",
             replace_existing=True
         )
-        print(f"Scheduled professor email for event {event_id}.")
     except Exception as e:
-        print(f"[SCHEDULER ERROR] Could not schedule professor email for event {event_id}: {e}")
+        print(f"[SCHEDULER ERROR] Could not schedule email: {e}")
 
     return redirect(url_for("dashboard", success=1))
 
 # Route: API endpoint for event list (returns JSON)
 @app.route("/api/events", methods=["GET"])
+@login_required
 def get_events():
     conn = get_db_connection()
     cursor = conn.cursor()
+
     cursor.execute("""
         SELECT eventID, eventName, eventDate, startTime, stopTime,
-               latitude, longitude, eventAddress, isRecurring, recurrenceInterval
+               latitude, longitude, eventAddress
         FROM events
     """)
-    fetch_events = cursor.fetchall()
+    events = cursor.fetchall()
     conn.close()
 
     formatted_events = []
@@ -934,6 +1033,7 @@ def get_events():
 
 
 @app.route("/submit_place", methods=["POST"])
+@login_required
 def submit_place():
     data = request.json
     name = data.get("name")
@@ -958,6 +1058,7 @@ def submit_place():
 
 # Route: Fetch all places
 @app.route("/api/places", methods=["GET"])
+@login_required
 def get_places():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -977,6 +1078,7 @@ def get_places():
     return jsonify(places_list)
 
 @app.route('/find_student', methods=['GET', 'POST'])
+@login_required
 def find_student():
     students = None  # Ensure we differentiate between no search and empty results
 
@@ -984,22 +1086,50 @@ def find_student():
         first_name = request.form['first_name'].strip()
         last_name = request.form['last_name'].strip()
 
-        if first_name or last_name:  # Ensure at least one field is filled
-            conn = get_db_connection()
-            cursor = conn.cursor()
+        conn = get_db_connection()
+        cursor = conn.cursor()
 
+        # Adjust query based on the search fields being filled
+        if first_name and last_name:
             query = '''
-            SELECT * FROM student_checkins 
-            WHERE (firstName LIKE ? OR lastName LIKE ?)
+            SELECT sc.*, e.eventName, e.startTime, e.stopTime 
+            FROM student_checkins sc
+            LEFT JOIN events e ON sc.scannedEventID = e.eventID
+            WHERE LOWER(sc.firstName) = LOWER(?) AND LOWER(sc.lastName) = LOWER(?)
             '''
+            params = [first_name, last_name]
+        elif first_name:
+            query = '''
+            SELECT sc.*, e.eventName, e.startTime, e.stopTime 
+            FROM student_checkins sc
+            LEFT JOIN events e ON sc.scannedEventID = e.eventID
+            WHERE LOWER(sc.firstName) = LOWER(?)
+            '''
+            params = [first_name]
+        elif last_name:
+            query = '''
+            SELECT sc.*, e.eventName, e.startTime, e.stopTime 
+            FROM student_checkins sc
+            LEFT JOIN events e ON sc.scannedEventID = e.eventID
+            WHERE LOWER(sc.lastName) = LOWER(?)
+            '''
+            params = [last_name]
+        else:
+            query = '''
+            SELECT sc.*, e.eventName, e.startTime, e.stopTime 
+            FROM student_checkins sc
+            LEFT JOIN events e ON sc.scannedEventID = e.eventID
+            '''  # Show all students if nothing is filled
 
-            params = [f'%{first_name}%', f'%{last_name}%']
-
-            cursor.execute(query, params)
-            students = cursor.fetchall()
-            conn.close()
+        cursor.execute(query, params)
+        students = cursor.fetchall()
+        conn.close()
 
     return render_template('find_student.html', students=students)
+
+
+
+
 
 @app.route("/test_email/<int:event_id>")
 def test_send_professor_email(event_id):
