@@ -46,4 +46,3 @@
   - Only includes students who checked in and out within 100m of event location.
 ### Removed
 - Dropped deprecated `attendance_status` table
-- Cleaned 3 invalid rows from `events` table with missing address and recurrence info.
