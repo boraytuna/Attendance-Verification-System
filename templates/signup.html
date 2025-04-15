@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Attendance Verification System | Signup</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <h1 style="font-size: 2rem; font-weight: bold; text-align: center;">Create An Account</h1>
+    <div class="failed-container" id="failed-container" style="display:none; margin:0; padding:0;">
+        <p class="failed-message-header" id="failed-message-header" style="margin:0; padding:0;">Failed to create an account!</p>
+        <p class="failed-message" id="failed-message" style="margin:0; padding:0;"></p>
+    </div>
+    <form class="form-container">
+        <label for="first_name">First Name</label>
+        <div class="input-container">
+            <input type="text" id="first_name" name="first_name" placeholder="First Name" required>
+        </div>
+        <label for="last_name">Last Name</label>
+        <div class="input-container">
+            <input type="text" id="last_name" name="last_name" placeholder="Last Name" required>
+        </div>
+        <label for="email">Email</label>
+        <div class="input-container">
+            <i class="fa-regular fa-user"></i>
+            <input type="text" id="email" name="email" placeholder="Email" required>
+        </div>
+        <label for="password">Password</label>
+        <div class="input-container">
+            <i class="fa-regular fa-user"></i>
+            <input type="password" id="password" name="password" minlength="6" placeholder="Password" required>
+        </div>
+    </form>
+    <button id="submitSignup" type="submit">Create Account</button>
+</body>
+<script>
+    const failedContainer = document.getElementById("failed-container");
+    const failedMessageHeader = document.getElementById("failed-message-header");
+    const failedMessage = document.getElementById("failed-message");
+
+    document.getElementById("submitSignup").addEventListener("click", function() {
+        let email = document.getElementById("email").value;
+        let password = document.getElementById("password").value;
+        let first_name = document.getElementById("first_name").value;
+        let last_name = document.getElementById("last_name").value;
+
+        if (email) {
+            fetch("/submit_signup", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    first_name: first_name,
+                    last_name: last_name,
+                    email: email,
+                    password: password
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    //redirect user to login page after successful signup
+                    window.location.href = "{{ url_for('login') }}";
+                } else {
+                    failedContainer.style.display = "block";
+                    failedMessage.innerText = data.message;
+                    if (data.message === "An account with this email already exists.") {
+                        failedMessage.innerHTML += `<br><p><a href="{{ url_for('login') }}">Login</a> instead?</p>`;
+                    }
+                }
+            })
+        }
+    })
+</script>

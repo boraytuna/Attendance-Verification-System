@@ -12,13 +12,16 @@
         <div class="calendar-grid" id="calendar"></div>
     </div>
 
-    <!-- Event details section -->
-   <div id="event-details" style="display: none; border: 1px solid #ccc; padding: 15px; margin-top: 20px;">
-      <h3 id="detail-title"></h3>
-       <p><strong>Date:</strong> <span id="detail-date"></span></p>
-       <p><strong>Time:</strong> <span id="detail-time"></span></p>
-       <p><strong>Location:</strong> <span id="detail-location"></span></p>
-   </div>
+    <!-- ✅ Modal for Event Details -->
+  <div id="eventModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <span class="close-button">&times;</span>
+      <h2 id="modalTitle"></h2>
+      <p><strong>Date:</strong> <span id="modalDate"></span></p>
+      <p><strong>Time:</strong> <span id="modalTime"></span></p>
+      <p><strong>Location:</strong> <span id="modalLocation"></span></p>
+    </div>
+  </div>
 
 
     <link rel="stylesheet" href="{{ url_for('static', filename='css/calendar.css') }}">
@@ -64,40 +67,43 @@
 
 
 function loadEvents() {
-    axios.get("/api/events")
-        .then(response => {
-            console.log("Events loaded:", response.data);
-            const events = response.data;
+    fetch("/api/events")
+        .then(response => response.json())
+        .then(events => {
             events.forEach(event => {
-                const eventDate = event.start.split("T")[0];
-                const cell = document.querySelector(`[data-date='${eventDate}']`);
+                const cell = document.querySelector(`[data-date='${event.eventDate}']`);
                 if (cell) {
                     const eventDiv = document.createElement("div");
-                    eventDiv.classList.add("event");
-                    eventDiv.textContent = event.title;
-
-                    // Store full event data as dataset
-                    eventDiv.dataset.title = event.title;
-                    eventDiv.dataset.date = event.start.split("T")[0];
-                    eventDiv.dataset.time = event.start.split("T")[1]?.slice(0,5) || "TBD";
-                    eventDiv.dataset.location = event.location || "Not specified";
-
-                    // Add click listener
-                    eventDiv.addEventListener("click", function (e) {
-                        document.getElementById("detail-title").textContent = this.dataset.title;
-                        document.getElementById("detail-date").textContent = this.dataset.date;
-                        document.getElementById("detail-time").textContent = this.dataset.time;
-                        document.getElementById("detail-location").textContent = this.dataset.location;
-                        document.getElementById("event-details").style.display = "block";
+                    eventDiv.classList.add("event-item");
+                    eventDiv.textContent = event.eventName;
+                    eventDiv.addEventListener("click", function(e) {
+                        e.stopPropagation(); // Prevent click from bubbling
+                        showModal(event);
                     });
-
                     cell.querySelector(".event-list").appendChild(eventDiv);
                 }
             });
-        })
-        .catch(error => console.error("Error loading events:", error));
+        });
 }
 
+// Modal logic
+const modal = document.getElementById("eventModal");
+const closeButton = document.querySelector(".close-button");
+
+function showModal(event) {
+    document.getElementById("modalTitle").textContent = event.eventName;
+    document.getElementById("modalDate").textContent = event.eventDate;
+    document.getElementById("modalTime").textContent = `${event.startTime} - ${event.stopTime}`;
+    document.getElementById("modalLocation").textContent = event.eventAddress || `${event.latitude}, ${event.longitude}`;
+    modal.style.display = "block";
+}
+
+closeButton.onclick = () => { modal.style.display = "none"; }
+window.onclick = function(event) {
+    if (event.target === modal) {
+        modal.style.display = "none";
+    }
+};
 
             prevMonthBtn.addEventListener("click", function () {
                 currentDate.setMonth(currentDate.getMonth() - 1);

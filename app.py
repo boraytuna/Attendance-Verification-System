@@ -1,14 +1,15 @@
-from flask import Flask, session, render_template, request, redirect, jsonify, send_file
+from flask import Flask, session, render_template, request, redirect, jsonify, send_file, flash, url_for
 from flask_mail import Mail, Message
 import sqlite3
 import os
 import segno
-import requests
 import random
+import math
 from datetime import datetime, timedelta
-
-import time
-from threading import Thread
+from geopy.distance import geodesic
+from apscheduler.schedulers.background import BackgroundScheduler
+import passlib, passlib.hash
+from passlib.hash import sha256_crypt
 
 app = Flask(__name__)
 
@@ -18,7 +19,13 @@ QR_CODE_FOLDER = "qr_codes"
 #session key
 app.secret_key = os.urandom(24)
 
-#mail server configuration
+#scheduler for scheduling professor attendance emails
+scheduler = BackgroundScheduler()
+scheduler.start()
+
+ENFORCE_DEVICE_ID = True  # Can toggle off for testing or relaxed events
+
+# mail server configuration
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
@@ -31,10 +38,13 @@ mail = Mail(app)
 if not os.path.exists(QR_CODE_FOLDER):
     os.makedirs(QR_CODE_FOLDER)
 
-GOOGLE_API_KEY = "AIzaSyAzf_3rNo5yi24L3Mu35o5VHaw1PwVmeTs"  # Replace with your actual Google API key
+GOOGLE_API_KEY = "AIzaSyAzf_3rNo5yi24L3Mu35o5VHaw1PwVmeTs"
 
 # Function to connect to SQLite
 def get_db_connection():
+    """
+    Establish a connection to the SQLite attendance.db database.
+    """
     conn = sqlite3.connect(DATABASE_NAME)
     conn.row_factory = sqlite3.Row  # Enables dictionary-style access
     conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
@@ -42,6 +52,9 @@ def get_db_connection():
 
 # TEMPORARY - function to connect to fake DB
 def get_fakedb_connection():
+    """
+    Establish a connection to the SQLite fake.db database.
+    """
     conn = sqlite3.connect("fake.db")
     conn.row_factory = sqlite3.Row  # Enables dictionary-style access
     conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
@@ -51,6 +64,17 @@ def get_fakedb_connection():
 def create_tables():
     conn = get_db_connection()
     cursor = conn.cursor()
+
+    # Create Users Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            userID INTEGER PRIMARY KEY AUTOINCREMENT,
+            first_name TEXT NOT NULL,
+            last_name TEXT NOT NULL,
+            email TEXT NOT NULL,
+            password TEXT NOT NULL
+        )
+    ''')
 
     # Create Events Table
     cursor.execute('''
@@ -68,8 +92,9 @@ def create_tables():
 
     # Create Student Check-Ins Table
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS student_checkins (
+        CREATE TABLE IF NOT EXISTS student_checkins(
             checkinID INTEGER PRIMARY KEY AUTOINCREMENT,
+            deviceId TEXT NOT NULL,
             firstName TEXT NOT NULL,
             lastName TEXT NOT NULL,
             email TEXT NOT NULL,
@@ -78,17 +103,9 @@ def create_tables():
             scannedEventID INTEGER NOT NULL,
             studentLocation TEXT NOT NULL,
             checkinTime DATETIME DEFAULT CURRENT_TIMESTAMP,
+            endLocation TEXT,
+            endTime DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (scannedEventID) REFERENCES events(eventID)
-        )
-    ''')
-
-    # Create Attendance Status Table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS attendance_status (
-            statusID INTEGER PRIMARY KEY AUTOINCREMENT,
-            checkinID INTEGER NOT NULL,
-            attendanceStatus TEXT NOT NULL CHECK (attendanceStatus IN ('Attended', 'Left Early')),
-            FOREIGN KEY (checkinID) REFERENCES student_checkins(checkinID)
         )
     ''')
 
@@ -102,7 +119,7 @@ def create_tables():
                 building TEXT NOT NULL,
                 address TEXT NULL
             )
-    ''')
+        ''')
 
     conn.commit()
     conn.close()
@@ -110,16 +127,149 @@ def create_tables():
 # Ensure database tables exist
 create_tables()
 
-# Route: Dashboard
 @app.route("/")
+def landing_page():
+    """
+    Flask route for the landing page.
+    
+    Returns:
+        the rendered landing page HTML template
+    """
+    return render_template("landing_page.html")
+
+@app.route("/signup")
+def signup():
+    """
+    Flask route rendering for the signup page.
+
+    Returns:
+        the rendered signup page HTML template
+    """
+    return render_template("signup.html")
+
+@app.route("/submit_signup", methods=["POST"])
+def submit_signup():
+    """
+    API route to handle user signup.
+    """
+    data = request.json
+    first_name = data.get('first_name')
+    last_name = data.get('last_name')
+    email = data.get('email')
+    password = sha256_crypt.encrypt(data.get('password'))
+
+    conn = get_db_connection()
+    try:
+        # first check if account with email already exists
+        user = conn.cursor().execute('''
+            SELECT * FROM users WHERE email = ?
+        ''', (email,)).fetchone()
+
+        if user is not None:
+            return jsonify({
+                "success": False,
+                "message": "An account with this email already exists."
+            })
+        else:
+            conn.cursor().execute('''
+                INSERT INTO users (first_name, last_name, email, password)
+                VALUES (?, ?, ?, ?)
+            ''', (first_name, last_name, email, password))
+            conn.commit()
+
+            return jsonify({
+                "success": True,
+                "message": "Account creation successful!"
+            })
+    except sqlite3.Error as e:
+        return jsonify({
+            "success": False,
+            "message": f"Database error: {str(e)}"
+        })
+    finally:
+        conn.close()
+
+@app.route("/submit_login", methods=["POST"])
+def submit_login():
+    """
+    API route to handle user login.
+    """
+    data = request.json
+    email = data.get('email')
+    password = data.get('password')
+
+    conn = get_db_connection()
+    try:
+        user = conn.cursor().execute('''
+            SELECT * FROM users WHERE email = ?
+        ''', (email,)).fetchone()
+    except sqlite3.Error as e:
+        return jsonify({
+            "success": False,
+            "message": f"Database error: {str(e)}"
+        })
+    finally:
+        conn.close()
+
+    if user is None:
+        return jsonify({
+            "success": False,
+            "message": "No account exists with this email."
+        })
+    elif sha256_crypt.verify(password, user[4]):  # assuming index 4 = password
+        session['user_id'] = user[0]
+        session['user_email'] = user[3]
+        session['first_name'] = user[1]
+        session['last_name'] = user[2]
+        return jsonify({
+            "success": True,
+            "message": "Login successful."
+        })
+    else:
+        return jsonify({
+            "success": False,
+            "message": "Incorrect password."
+        })
+
+@app.route("/login")
+def login():
+    """
+    Flask route rendering for the login page.
+
+    Returns:
+        the rendered login page HTML template
+    """
+    return render_template("login.html")
+
 @app.route("/dashboard")
 def dashboard():
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM events")
-    events = cursor.fetchall()
+
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+    # Upcoming events: event start is in the future
+    cursor.execute("""
+        SELECT e.*, p.name AS place_name, p.building
+        FROM events e
+        LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
+        WHERE eventDate || 'T' || startTime >= ?
+        ORDER BY eventDate, startTime
+    """, (now,))
+    upcoming = cursor.fetchall()
+
+    # Past events: event has already ended
+    cursor.execute("""
+        SELECT e.*, p.name AS place_name, p.building
+        FROM events e
+        LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
+        WHERE eventDate || 'T' || stopTime < ?
+        ORDER BY eventDate DESC, startTime DESC
+    """, (now,))
+    past = cursor.fetchall()
+
     conn.close()
-    return render_template("dashboard.html", events=events)
+    return render_template("dashboard.html", upcoming_events=upcoming, past_events=past)
 
 # Route: Events Page
 @app.route("/events", methods=["GET"])
@@ -134,12 +284,20 @@ def events():
 # Route: Calendar Page
 @app.route("/calendar")
 def calendar():
-    return render_template("calendar.html")
+    conn = get_db_connection()
+    events = conn.execute("SELECT * FROM events").fetchall()
+    conn.close()
 
-# Route: Find Student Page
-@app.route("/find_student")
-def find_student():
-    return render_template("find_student.html")
+    # Convert to a list of dicts if needed (e.g., for JSON compatibility)
+    event_list = []
+    for event in events:
+        event_list.append({
+            'title': event['eventName'],
+            'start': f"{event['eventDate']}T{event['startTime']}",
+            'end': f"{event['eventDate']}T{event['stopTime']}",
+        })
+
+    return render_template("calendar.html", events=event_list)
 
 # Route: Places Page
 @app.route("/places")
@@ -150,6 +308,42 @@ def places():
     places = cursor.fetchall()
     conn.close()
     return render_template("places.html", places=places)
+
+
+@app.route('/account', methods=['GET', 'POST'])
+def account():
+    if 'user_email' not in session:
+        return redirect(url_for('login'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # fetch full user info
+    cursor.execute("""
+        SELECT first_name, last_name, email, password FROM users WHERE email = ?
+    """, (session['user_email'],))
+    user = cursor.fetchone()
+
+    if request.method == 'POST':
+        new_password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+
+        if new_password != confirm_password:
+            flash("❌ Passwords do not match.")
+        else:
+            encrypted = sha256_crypt.hash(new_password)
+            cursor.execute("""
+                UPDATE users SET password = ? WHERE email = ?
+            """, (encrypted, session['user_email']))
+            conn.commit()
+            conn.close()
+
+            flash("✅ Password updated successfully. Please log in again.")
+            session.clear()  # force logout
+            return redirect(url_for('login'))
+
+    conn.close()
+    return render_template('account.html', user=user)
 
 # Function to generate (or retrieve) QR code
 def get_or_create_qr_code(event_id):
@@ -259,7 +453,6 @@ def search_professors():
     conn.close()
     return jsonify([row[0] for row in results])
 
-# **API Route for Submitting Student Check-In Form**
 @app.route('/submit_student_checkin', methods=['POST'])
 def submit_student_checkin():
     data = request.json
@@ -270,111 +463,305 @@ def submit_student_checkin():
     professorForExtraCredit = data['professorForExtraCredit']
     scannedEventID = int(data['scannedEventID'])
     studentLocation = str(data['studentLocation'])
+    deviceId = data.get('deviceId')  # New field from frontend
 
     conn = get_db_connection()
-    conn.cursor().execute('''
-        INSERT INTO student_checkins (firstName, lastName, email, classForExtraCredit, professorForExtraCredit, scannedEventID, studentLocation)
-        VALUES (?, ?, ?, ?, ?, ?, ?)''',
-        (firstName, lastName, email, classForExtraCredit, professorForExtraCredit, scannedEventID, studentLocation))
+    cursor = conn.cursor()
+
+    # ✅ Device restriction check (optional)
+    if ENFORCE_DEVICE_ID:
+        cursor.execute('''
+            SELECT 1 FROM student_checkins
+            WHERE scannedEventID = ? AND deviceId = ?
+        ''', (scannedEventID, deviceId))
+        if cursor.fetchone():
+            conn.close()
+            return jsonify({
+                'status': 'error',
+                'message': 'This device has already been used to check in for this event.'
+            })
+
+    # Insert student check-in
+    cursor.execute('''
+        INSERT INTO student_checkins (
+            firstName, lastName, email, classForExtraCredit,
+            professorForExtraCredit, scannedEventID, studentLocation, deviceId
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        firstName, lastName, email, classForExtraCredit,
+        professorForExtraCredit, scannedEventID, studentLocation, deviceId
+    ))
+
+    # Get checkinID for this new row
+    cursor.execute('''
+        SELECT checkinID, checkinTime FROM student_checkins
+        WHERE email = ? AND scannedEventID = ? AND lastName = ?
+        ORDER BY checkinTime DESC LIMIT 1
+    ''', (email, scannedEventID, lastName))
+    result = cursor.fetchone()
+
+    checkin_id = result["checkinID"]
+    checkin_time = datetime.strptime(result["checkinTime"], "%Y-%m-%d %H:%M:%S")
+
+    # Fetch event start time
+    cursor.execute('SELECT eventDate, startTime FROM events WHERE eventID = ?', (scannedEventID,))
+    event_row = cursor.fetchone()
+    event_start = datetime.strptime(f"{event_row['eventDate']} {event_row['startTime']}", "%Y-%m-%d %H:%M")
+
+    # Determine attendance status based on grace period
+    grace_period_minutes = 10
+    late_cutoff = event_start + timedelta(minutes=grace_period_minutes)
+
+    status = "Attended Late" if checkin_time > late_cutoff else "Attended"
+    
+    conn.commit()
+    conn.close()
+
+    return jsonify({'status': 'success'})
+
+@app.route('/submit_end_location', methods=['POST'])
+def submit_end_location():
+    print("📍 /submit_end_location called")
+    data = request.json
+    email = data['email']
+    scannedEventID = int(data['scannedEventID'])
+    endLocation = str(data['endLocation'])
+    endTime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    lastName = data['lastName']
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        UPDATE student_checkins
+        SET endLocation = ?, endTime = ?
+        WHERE email = ? AND scannedEventID = ? AND lastName = ?
+    ''', (endLocation, endTime, email, scannedEventID, lastName))
+
     conn.commit()
     conn.close()
 
     return jsonify({'status': 'success'})
 
 # **Functions for Generating and Sending Emails to Professors Post-Event**
-def construct_email_records():
-    """
-    Collect a list of professors and their students' attendance records
-    to be used to generate emails.
+def haversine_distance(lat1, lon1, lat2, lon2):
+    R = 6371000  # Radius of Earth in meters
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    d_phi = math.radians(lat2 - lat1)
+    d_lambda = math.radians(lon2 - lon1)
 
-    Returns:
-    emails - dictionary with professor names as keys and a list of student
-    details as values
+    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return R * c
+
+def parse_location(location_str):
+    try:
+        lat_str, lon_str = location_str.split(",")
+        return float(lat_str.strip()), float(lon_str.strip())
+    except Exception:
+        return None, None
+
+def construct_email_records(event_id):
+    """
+    Return a dictionary of professors mapped to students who checked in/out
+    within 100 meters of the event location.
     """
     conn = get_db_connection()
 
-    #get student information and their attendance status records
-    results = conn.cursor().execute('''
-        SELECT sc.firstName, sc.lastName, sc.classForExtraCredit, sc.professorForExtraCredit, atd.attendanceStatus
-        FROM student_checkins sc
-        JOIN attendance_status atd ON sc.checkinID = atd.checkinID
-    ''').fetchall()
+    # Fetch event info
+    event = conn.execute('''
+        SELECT eventName, eventDate, startTime, stopTime, latitude, longitude
+        FROM events
+        WHERE eventID = ?
+    ''', (event_id,)).fetchone()
 
-    #get unique professor names to use as keys in the dictionary
-    professors = conn.cursor().execute('''
-        SELECT DISTINCT sc.professorForExtraCredit
+    if not event:
+        conn.close()
+        return {}
+
+    event_name, event_date, start_time, stop_time, event_lat, event_lon = event
+
+    # Get student data
+    results = conn.execute('''
+        SELECT 
+            sc.firstName, sc.lastName, sc.email, sc.professorForExtraCredit,
+            sc.checkinTime, sc.endTime,
+            sc.studentLocation, sc.endLocation
         FROM student_checkins sc
-        JOIN attendance_status atd ON sc.checkinID = atd.checkinID
-    ''').fetchall()
+        WHERE sc.scannedEventID = ?
+    ''', (event_id,)).fetchall()
+
     conn.close()
 
-    #create a dictionary with professor names as keys
-    #and a list of student details as values
     emails = {}
-    for professor in professors:
-        records = []
-        professor_name = professor[0]
-        emails[professor_name] = records
 
-        for result in results:
-            if result[3] == professor_name:
-                records.append(f'{result[0]} {result[1]} - {result[2]} - {result[4]}')
+    for row in results:
+        first_name, last_name, email, professor, checkin_time, checkout_time, start_loc, end_loc = row
+
+        start_lat, start_lon = parse_location(start_loc) if start_loc else (None, None)
+        end_lat, end_lon = parse_location(end_loc) if end_loc else (None, None)
+
+        if None in [start_lat, start_lon, end_lat, end_lon]:
+            continue  # skip if any location is missing or invalid
+
+        dist_checkin = haversine_distance(event_lat, event_lon, start_lat, start_lon)
+        dist_checkout = haversine_distance(event_lat, event_lon, end_lat, end_lon)
+
+        if dist_checkin <= 100 and dist_checkout <= 100:
+            if professor not in emails:
+                emails[professor] = []
+
+            emails[professor].append({
+                'first_name': first_name,
+                'last_name': last_name,
+                'email': email,
+                'event_name': event_name,
+                'event_id': event_id,
+                'official_start': start_time,
+                'official_end': stop_time,
+                'checkin_time': checkin_time,
+                'checkout_time': checkout_time or "Not Submitted"
+            })
 
     return emails
 
-def send_professor_emails():
+def send_professor_emails(event_id):
     """
     Send emails to professors with a summary of student attendance records.
     """
-    emails = construct_email_records()
-    professors = (emails.keys())
+    print(f"[🚨 EMAIL JOB STARTED] Event ID: {event_id}")
+    emails = construct_email_records(event_id)
+    print(f"[🗃 EMAIL DATA] Found {len(emails)} professors for Event ID {event_id}")
+    professors = emails.keys()
+
+    # Get event name
+    conn = get_db_connection()
+    if not conn:
+        print("[❌ ERROR] Could not get DB connection")
+
+    event = conn.execute('SELECT eventName FROM events WHERE eventID = ?', (event_id,)).fetchone()
+    conn.close()
+    event_name = event[0] if event else "Unknown Event"
 
     conn_fakedb = get_fakedb_connection()
-    for professor in professors:
-        #get the professors' email from fake db
-        professor_email = conn_fakedb.cursor().execute('''
-            SELECT professor_email FROM Professor WHERE professor_name = ?
-        ''', (professor,)).fetchone()
+    if not conn:
+        print("[❌ ERROR] Could not get DB connection")
 
-        #format student attendance records as an html body, use plaintext as
-        #backup if html within email is unsupported
-        plaintext_msg = 'Hello ' + professor + '! The following students recently attended an event for course credit:\n' + '\n'.join(emails[professor])
+    for professor in professors:
+        professor_email = conn_fakedb.execute(
+            'SELECT professor_email FROM Professor WHERE professor_name = ?',
+            (professor,)
+        ).fetchone()
+
+        if not professor_email:
+            continue
+
+        student_rows = emails[professor]
+        print(f"[📨 EMAIL TO] {professor} → {professor_email}")
+
+        # Plaintext fallback
+        plaintext_msg = f"Hello {professor},\nHere is the attendance summary for {event_name}:\n"
+        for s in student_rows:
+            plaintext_msg += f"{s['first_name']} {s['last_name']} | {s['email']} | Check-in: {s['checkin_time']} | Check-out: {s['checkout_time']}\n"
+
+        # HTML Table
         html_msg = f'''
         <html>
             <body>
                 <p>Hello {professor},</p>
-                <p>The following students recently attended an event for course credit:</p>
+                <p>Here is the attendance summary for <strong>{event_name}</strong>:</p>
                 <table border="1" style="border-collapse: collapse; width: 100%;">
                     <tr>
-                        <th style="padding: 8px; text-align: left; border: 1px solid black;">Name</th>
-                        <th style="padding: 8px; text-align: left; border: 1px solid black;">Class</th>
-                        <th style="padding: 8px; text-align: left; border: 1px solid black;">Attendance Status</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Event ID</th>
+                        <th>Official Start</th>
+                        <th>Official End</th>
+                        <th>Check-in</th>
+                        <th>Check-out</th>
                     </tr>
-                    {''.join(f"<tr><td style='padding: 8px; border: 1px solid black;'>{result.split(' - ')[0]}</td>"
-                            f"<td style='padding: 8px; border: 1px solid black;'>{result.split(' - ')[1]}</td>"
-                            f"<td style='padding: 8px; border: 1px solid black;'>{result.split(' - ')[2]}</td></tr>"
-                            for result in emails[professor])}
+        '''
+
+
+        for s in student_rows:
+            html_msg += f'''
+                <tr>
+                    <td>{s['first_name']} {s['last_name']}</td>
+                    <td>{s['email']}</td>
+                    <td>{s['event_id']}</td>
+                    <td>{s['official_start']}</td>
+                    <td>{s['official_end']}</td>
+                    <td>{s['checkin_time']}</td>
+                    <td>{s['checkout_time']}</td>
+                </tr>
+            '''
+
+        html_msg += '''
                 </table>
+                <p>Please review the times and assign attendance credit manually based on their duration.</p>
             </body>
         </html>
         '''
-        msg = Message (
-            subject='Student Attendance Notification',
-            recipients=[professor_email[0]],
-            body=plaintext_msg,
-            html=html_msg
-        )
-        mail.send(msg)
+
+        with app.app_context():
+            try:
+                msg = Message(
+                    subject=f'Student Attendance Report - {event_name}',
+                    recipients=[professor_email[0]],
+                    body=plaintext_msg,
+                    html=html_msg
+                )
+                mail.send(msg)
+                print(f"[✅ EMAIL SENT] Event {event_id} → {professor} ({professor_email[0]})")
+            except Exception as e:
+                print(f"[❌ EMAIL FAILED] Event {event_id} → {professor} ({professor_email[0]}): {e}")
 
     conn_fakedb.close()
 
-#TODO - this occurs immediately upon app startup, need to change
-#to a scheduled duration or decide on something else?
-with app.app_context():
-    pass
-    send_professor_emails()
+    # Mark this event as "email sent"
+    conn = get_db_connection()
+    conn.execute("UPDATE events SET professor_email_sent = 1 WHERE eventID = ?", (event_id,))
+    conn.commit()
+    conn.close()
+    print("Updated events table for email sent")
 
-# Route: Handle Event Creation
+def reschedule_pending_emails():
+    """
+    On server restart, re-schedule any professor emails that haven't been sent
+    and whose stopTime is still in the future (within 5 minutes window).
+    """
+    conn = get_db_connection()
+    now = datetime.now()
+
+    events = conn.execute('''
+        SELECT eventID, eventDate, stopTime 
+        FROM events 
+        WHERE professor_email_sent = 0
+    ''').fetchall()
+
+    for event in events:
+        event_id, event_date, stop_time = event
+        try:
+            stop_dt = datetime.strptime(f"{event_date} {stop_time}", "%Y-%m-%d %H:%M")
+            execute_dt = stop_dt + timedelta(minutes=5)
+
+            if execute_dt > now:
+                # Job still valid, reschedule it
+                scheduler.add_job(
+                    func=send_professor_emails,
+                    trigger='date',
+                    run_date=execute_dt,
+                    args=[event_id],
+                    id=f"professor_email_{event_id}",
+                    replace_existing=True
+                )
+                print(f"Rescheduled professor email for {event_id}.")
+        except Exception as e:
+            print(f"[RESCHEDULE ERROR] Could not reschedule email for event {event_id}: {e}")
+
+    conn.close()
+
 @app.route("/submit_event", methods=["POST"])
 def submit_event():
     event_name = request.form["event_name"]
@@ -394,17 +781,39 @@ def submit_event():
     try:
         lat, lng = map(float, event_location.split(","))
     except ValueError:
-        return jsonify({"message": "Invalid location format"}), 400
+        flash("❌ Invalid location format.", "error")
+        return redirect(url_for("events"))
 
-    # Use the address provided by the frontend
+    # NEW: Validate time logic
+    if start_time >= stop_time:
+        flash("❌ End time must be later than start time.", "error")
+        return redirect(url_for("events"))
+
+    # NEW: Prevent duplicate event at same time/location
     conn = get_db_connection()
     cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM events 
+        WHERE eventDate = ? AND startTime = ? AND stopTime = ? 
+        AND ROUND(latitude, 6) = ROUND(?, 6) AND ROUND(longitude, 6) = ROUND(?, 6)
+    """, (event_date, start_time, stop_time, lat, lng))
+    same_time_place = cursor.fetchone()
+
+    if same_time_place:
+        conn.close()
+        flash("❌ Another event is already scheduled at this time and location.", "error")
+        return redirect(url_for("events"))
+
+    # SAFE TO INSERT
     cursor.execute('''
         INSERT INTO events (eventName, eventDate, startTime, stopTime, latitude, longitude, eventAddress)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     ''', (event_name, event_date, start_time, stop_time, lat, lng, event_address))
+   
 
-     # Generate recurring dates
+    # Generate recurring dates
+    recurrence = request.form.get("recurrence", "none").lower()
+    event_date_obj = datetime.strptime(event_date, "%Y-%m-%d")
     occurrences = [event_date_obj]
     if recurrence in ["daily", "weekly", "monthly"]:
         for i in range(1, 10):  # generate 10 future occurrences
@@ -429,13 +838,37 @@ def submit_event():
         ''', (event_name, date.strftime("%Y-%m-%d"), start_time, stop_time, lat, lng, event_address))
 
 
+        event_id = cursor.lastrowid
+        get_or_create_qr_code(event_id)
+
     event_id = cursor.lastrowid
+
     conn.commit()
     conn.close()
 
     get_or_create_qr_code(event_id)
 
-    return redirect("/events")
+    # ✅ Schedule email 5 minutes after event ends
+    try:
+        # Combine date and time from form
+        event_end_str = f"{event_date} {stop_time}"
+        event_end_dt = datetime.strptime(event_end_str, "%Y-%m-%d %H:%M")
+        executetime = event_end_dt + timedelta(minutes=5)
+
+        # Schedule the email with a unique job ID
+        scheduler.add_job(
+            func=send_professor_emails,
+            trigger='date',
+            run_date=executetime,
+            args=[event_id],
+            id=f"professor_email_{event_id}",
+            replace_existing=True
+        )
+        print(f"Scheduled professor email for event {event_id}.")
+    except Exception as e:
+        print(f"[SCHEDULER ERROR] Could not schedule professor email for event {event_id}: {e}")
+
+    return redirect(url_for("dashboard", success=1))
 
 # Route: API endpoint for event list (returns JSON)
 @app.route("/api/events", methods=["GET"])
@@ -461,10 +894,11 @@ def get_events():
 
         # Add original event
         formatted_events.append({
-            "id": event_dict["eventID"],
-            "title": event_dict["eventName"],
-            "start": start_datetime,
-            "end": end_datetime,
+            "eventID": event_dict["eventID"],
+            "eventName": event_dict["eventName"],
+            "eventDate": event_dict["eventDate"],
+            "startTime": start_datetime,
+            "stopTime":end_datetime,
             "location": event_dict["eventAddress"],
             "latitude": event_dict["latitude"],
             "longitude": event_dict["longitude"]
@@ -491,9 +925,9 @@ def get_events():
                     "title": f"{event_dict['eventName']} (Recurring)",
                     "start": recur_start,
                     "end": recur_end,
-                    "location": event_dict["eventAddress"],
-                    "latitude": event_dict["latitude"],
-                    "longitude": event_dict["longitude"]
+                            "latitude": event_dict["latitude"],
+                    "longitude": event_dict["longitude"],
+            "eventAddress": event_dict["eventAddress"]
                 })
 
     return jsonify(formatted_events)
@@ -542,5 +976,36 @@ def get_places():
     ]
     return jsonify(places_list)
 
+@app.route('/find_student', methods=['GET', 'POST'])
+def find_student():
+    students = None  # Ensure we differentiate between no search and empty results
+
+    if request.method == 'POST':
+        first_name = request.form['first_name'].strip()
+        last_name = request.form['last_name'].strip()
+
+        if first_name or last_name:  # Ensure at least one field is filled
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            query = '''
+            SELECT * FROM student_checkins 
+            WHERE (firstName LIKE ? OR lastName LIKE ?)
+            '''
+
+            params = [f'%{first_name}%', f'%{last_name}%']
+
+            cursor.execute(query, params)
+            students = cursor.fetchall()
+            conn.close()
+
+    return render_template('find_student.html', students=students)
+
+@app.route("/test_email/<int:event_id>")
+def test_send_professor_email(event_id):
+    send_professor_emails(event_id)
+    return f"Triggered professor email manually for event {event_id}"
+
 if __name__ == "__main__":
+    reschedule_pending_emails()
     app.run(debug=True)

@@ -1,6 +1,188 @@
-<!-- find_student.html -->
 {% extends 'base.html' %}
-
 {% block content %}
-    <h1>Find Student</h1>
+
+<style>
+    body {
+        font-family: 'Segoe UI', sans-serif;
+        margin: 30px;
+        background-color: #f5f6f7;
+        color: #333;
+    }
+
+    .content-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .title-container {
+        text-align: center;
+        margin-bottom: 20px;
+        width: 100%;
+    }
+
+    h1 {
+        color: #0056b3;
+        font-size: 24px;
+        margin-bottom: 10px;
+    }
+
+    .form-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 100%;
+    }
+
+    form {
+        background-color: #fff;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+        max-width: 600px;
+        width: 100%;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    td {
+        padding: 10px;
+    }
+
+    label {
+        font-weight: bold;
+    }
+
+    input,
+    button {
+        margin-top: 5px;
+        padding: 10px;
+        width: 100%;
+        margin-bottom: 15px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        box-sizing: border-box;
+    }
+
+    button {
+        background-color: #0056b3;
+        color: #fff;
+        cursor: pointer;
+        transition: background-color 0.3s;
+    }
+
+    button:hover {
+        background-color: #004494;
+    }
+
+    .result-container {
+        margin-top: 20px;
+        width: 100%;
+        max-width: 1000px;
+        background-color: #fff;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+    }
+
+    .result-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .result-table th,
+    .result-table td {
+        border: 1px solid #ccc;
+        padding: 8px;
+        text-align: left;
+    }
+
+    .result-table th {
+        background-color: #0056b3;
+        color: white;
+    }
+
+    .no-results {
+        color: red;
+        text-align: center;
+        font-weight: bold;
+        margin-top: 10px;
+    }
+</style>
+
+<div class="content-container">
+    <div class="title-container">
+        <h1>🔍 Find Student</h1>
+    </div>
+
+    <div class="form-container">
+        <form action="/find_student" method="post">
+            <table>
+                <tr>
+                    <td><label for="first_name">Student First Name:</label></td>
+                    <td><input type="text" id="first_name" name="first_name"></td>
+                </tr>
+                <tr>
+                    <td><label for="last_name">Student Last Name:</label></td>
+                    <td><input type="text" id="last_name" name="last_name"></td>
+                </tr>
+                <tr>
+                    <td colspan="2">
+                        <button type="submit">Find Student</button>
+                    </td>
+                </tr>
+            </table>
+        </form>
+    </div>
+
+    {% if students is not none %}
+        {% if students %}
+            <div class="result-container">
+                <h2>Search Results</h2>
+                <table class="result-table">
+                    <thead>
+                        <tr>
+                            <th>First Name</th>
+                            <th>Last Name</th>
+                            <th>Email</th>
+                            <th>Class</th>
+                            <th>Professor</th>
+                            <th>Event</th>
+                            <th>Event Start</th>
+                            <th>Event End</th>
+                            <th>Check-in Time</th>
+                            <th>Check-out Time</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for student in students %}
+                        <tr>
+                            <td>{{ student['firstName'] }}</td>
+                            <td>{{ student['lastName'] }}</td>
+                            <td>{{ student['email'] }}</td>
+                            <td>{{ student['classForExtraCredit'] }}</td>
+                            <td>{{ student['professorForExtraCredit'] }}</td>
+                            <td>{{ student['eventName'] }}</td>
+                            <td>{{ student['startTime'] }}</td>
+                            <td>{{ student['stopTime'] }}</td>
+                            <td>{{ student['checkinTime'] }}</td>
+                            <td>{{ student['endTime'] }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="result-container">
+                <h2>Search Results</h2>
+                <p class="no-results">⚠️ No students found. Try again with a different name.</p>
+            </div>
+        {% endif %}
+    {% endif %}
+</div>
+
 {% endblock %}

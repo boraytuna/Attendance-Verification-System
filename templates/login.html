@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Attendance Verification System | Login</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <h1 style="font-size: 2rem; font-weight: bold; text-align: center;">Login To Account</h1>
+    <div class="failed-container" id="failed-container" style="display:none; margin:0; padding:0;">
+        <p class="failed-message-header" id="failed-message-header" style="margin:0; padding:0;">Failed to login!</p>
+        <p class="failed-message" id="failed-message" style="margin:0; padding:0;"></p>
+    </div>
+    <form class="form-container">
+        <label for="email">Email</label>
+        <div class="input-container">
+            <i class="fa-regular fa-user"></i>
+            <input type="text" id="email" name="email" placeholder="Email" required>
+        </div>
+        <label for="password">Password</label>
+        <div class="input-container">
+            <i class="fa-regular fa-user"></i>
+            <input type="password" id="password" name="password" minlength="6" placeholder="Password" required>
+        </div>
+    </form>
+    <button id="submitLogin" type="submit">Login</button>
+</body>
+<script>
+    const failedContainer = document.getElementById("failed-container");
+    const failedMessage = document.getElementById("failed-message");
+
+    document.getElementById("submitLogin").addEventListener("click", function() {
+        let email = document.getElementById("email").value;
+        let password = document.getElementById("password").value;
+
+        if (email && password) {
+            fetch("/submit_login", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    email: email,
+                    password: password
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    //redirect user to dashboard page after successful login
+                    window.location.href = "{{ url_for('dashboard') }}";
+                } else {
+                    failedContainer.style.display = "block";
+                    failedMessage.innerText = data.message;
+                    if (data.message === "No account exists with this email.") {
+                        failedMessage.innerHTML += `<br><p><a href="{{ url_for('signup') }}">Create an account</a> instead?</p>`;
+                    }
+                }
+            })
+        }
+    })
+</script>
