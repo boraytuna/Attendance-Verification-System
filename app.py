@@ -1137,6 +1137,30 @@ def test_send_professor_email(event_id):
     send_professor_emails(event_id)
     return f"Triggered professor email manually for event {event_id}"
 
+@app.route("/event_info/<int:event_id>")
+@login_required
+def event_info(event_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Fetch event details along with stopTime
+    cursor.execute("""
+        SELECT e.*, p.name AS place_name, p.building
+        FROM events e
+        LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
+        WHERE e.eventID = ?
+    """, (event_id,))
+    event = cursor.fetchone()
+
+    conn.close()
+
+    if event:
+        return render_template("event_info.html", event=event)
+    else:
+        return "Event not found", 404
+
+
+
 if __name__ == "__main__":
     reschedule_pending_emails()
     app.run(debug=True)
