@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<style>
+    body {
+        font-family: 'Segoe UI', sans-serif;
+        margin: 30px;
+        background-color: #f5f6f7;
+        color: #333;
+    }
+
+    h1,
+    h2 {
+        text-align: center;
+        color: #0056b3;
+        margin-bottom: 20px;
+    }
+
+    .dashboard-container {
+        max-width: 1000px;
+        margin: auto;
+        background-color: #ffffff;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+        background-color: #fff;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    th,
+    td {
+        padding: 14px 18px;
+        border-bottom: 1px solid #ddd;
+        text-align: center;
+    }
+
+    th {
+        background-color: #0056b3;
+        color: white;
+    }
+
+    tr:nth-child(even) {
+        background-color: #f2f2f2;
+    }
+
+    .qr-buttons button,
+    .qr-button-link {
+        background-color: #28a745;
+        color: white;
+        text-decoration: none;
+        padding: 8px 12px;
+        border-radius: 5px;
+        font-size: 14px;
+        display: inline-block;
+        transition: background-color 0.2s;
+        border: none;
+        cursor: pointer;
+    }
+
+    .qr-buttons button:hover,
+    .qr-button-link:hover {
+        background-color: #218838;
+    }
+
+    .no-events {
+        text-align: center;
+        margin-top: 40px;
+        font-style: italic;
+        color: #777;
+    }
+
+    .dashboard-btn {
+        background-color: #007bff;
+        color: white;
+        padding: 8px 12px;
+        border-radius: 5px;
+        font-size: 14px;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-block;
+        margin-top: 20px;
+    }
+
+    .dashboard-btn:hover {
+        background-color: #0056b3;
+    }
+</style>
+
+<div class="dashboard-container" style="padding: 30px;">
+    <h1 style="text-align: center;">📋 Event Details</h1>
+
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Event</th>
+                <th>Start Time</th>
+                <th>Stop Time</th>
+                <th>Location</th>
+                <th>QR Code</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>{{ event['eventName'] }}</td>
+                <td>{{ event['startTime'] }}</td>
+                <td>{{ event['stopTime'] }}</td>
+                <td>{{ event['place_name'] ~ ' (' ~ event['building'] ~ ')' if event['place_name'] else event['eventAddress'] }}</td>
+                <td><a class="qr-button-link" href="/qr_code/{{ event['eventID'] }}" target="_blank">Show QR</a></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <a href="/dashboard" class="dashboard-btn">Back to Dashboard</a>
+</div>
+
+{% endblock %}
+
+
+
+
