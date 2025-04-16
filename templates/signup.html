@@ -7,69 +7,110 @@
 </head>
 <body>
     <h1 style="font-size: 2rem; font-weight: bold; text-align: center;">Create An Account</h1>
+
     <div class="failed-container" id="failed-container" style="display:none; margin:0; padding:0;">
         <p class="failed-message-header" id="failed-message-header" style="margin:0; padding:0;">Failed to create an account!</p>
         <p class="failed-message" id="failed-message" style="margin:0; padding:0;"></p>
     </div>
-    <form class="form-container">
+
+    <form class="form-container" id="signupForm">
         <label for="first_name">First Name</label>
         <div class="input-container">
             <input type="text" id="first_name" name="first_name" placeholder="First Name" required>
         </div>
+
         <label for="last_name">Last Name</label>
         <div class="input-container">
             <input type="text" id="last_name" name="last_name" placeholder="Last Name" required>
         </div>
+
         <label for="email">Email</label>
         <div class="input-container">
             <i class="fa-regular fa-user"></i>
             <input type="text" id="email" name="email" placeholder="Email" required>
         </div>
+
         <label for="password">Password</label>
-        <div class="input-container">
+        <div class="input-container password-wrapper" style="position: relative;">
             <i class="fa-regular fa-user"></i>
             <input type="password" id="password" name="password" minlength="6" placeholder="Password" required>
+            <button type="button" onclick="togglePassword('password')" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer;">👁️</button>
         </div>
+
+        <label for="confirm_password">Confirm Password</label>
+        <div class="input-container password-wrapper" style="position: relative;">
+            <i class="fa-regular fa-user"></i>
+            <input type="password" id="confirm_password" name="confirm_password" minlength="6" placeholder="Re-enter Password" required>
+            <button type="button" onclick="togglePassword('confirm_password')" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer;">👁️</button>
+        </div>
+
+        <p id="formError" style="color: red; font-size: 14px; display: none; margin-top: -5px;"></p>
+
+        <button id="submitSignup" type="submit">Create Account</button>
     </form>
-    <button id="submitSignup" type="submit">Create Account</button>
+
 </body>
 <script>
+    const form = document.getElementById("signupForm");
     const failedContainer = document.getElementById("failed-container");
-    const failedMessageHeader = document.getElementById("failed-message-header");
     const failedMessage = document.getElementById("failed-message");
+    const formError = document.getElementById("formError");
 
-    document.getElementById("submitSignup").addEventListener("click", function() {
-        let email = document.getElementById("email").value;
+    function togglePassword(fieldId) {
+        const field = document.getElementById(fieldId);
+        field.type = field.type === "password" ? "text" : "password";
+    }
+
+    form.addEventListener("submit", function (e) {
+        e.preventDefault();
+
+        let first_name = document.getElementById("first_name").value.trim();
+        let last_name = document.getElementById("last_name").value.trim();
+        let email = document.getElementById("email").value.trim();
         let password = document.getElementById("password").value;
-        let first_name = document.getElementById("first_name").value;
-        let last_name = document.getElementById("last_name").value;
+        let confirm_password = document.getElementById("confirm_password").value;
 
-        if (email) {
-            fetch("/submit_signup", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    first_name: first_name,
-                    last_name: last_name,
-                    email: email,
-                    password: password
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    //redirect user to login page after successful signup
-                    window.location.href = "{{ url_for('login') }}";
-                } else {
-                    failedContainer.style.display = "block";
-                    failedMessage.innerText = data.message;
-                    if (data.message === "An account with this email already exists.") {
-                        failedMessage.innerHTML += `<br><p><a href="{{ url_for('login') }}">Login</a> instead?</p>`;
-                    }
-                }
-            })
+        // Check for empty fields
+        if (!first_name || !last_name || !email || !password || !confirm_password) {
+            formError.textContent = "❗ Please fill out all fields.";
+            formError.style.display = "block";
+            return;
         }
-    })
+
+        // Check if passwords match
+        if (password !== confirm_password) {
+            formError.textContent = "❗ Passwords do not match.";
+            formError.style.display = "block";
+            return;
+        }
+
+        // Hide error if passed validation
+        formError.style.display = "none";
+
+        fetch("/submit_signup", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                first_name: first_name,
+                last_name: last_name,
+                email: email,
+                password: password
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.location.href = "{{ url_for('login') }}";
+            } else {
+                failedContainer.style.display = "block";
+                failedMessage.innerText = data.message;
+                if (data.message === "An account with this email already exists.") {
+                    failedMessage.innerHTML += `<br><p><a href="{{ url_for('login') }}">Login</a> instead?</p>`;
+                }
+            }
+        });
+    });
 </script>
+</html>
