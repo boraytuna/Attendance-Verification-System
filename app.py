@@ -332,6 +332,7 @@ def dashboard():
     conn.close()
     return render_template("dashboard.html", upcoming_events=upcoming, current_events=current, past_events=past)
 
+
 @app.route("/events")
 @login_required
 def events():
@@ -362,6 +363,7 @@ def calendar():
 
     return render_template("calendar.html", events=event_list)
 
+
 # Route: Places Page
 @app.route("/places")
 @login_required
@@ -372,6 +374,7 @@ def places():
     places = cursor.fetchall()
     conn.close()
     return render_template("places.html", places=places)
+
 
 @app.route('/account', methods=['GET', 'POST'])
 @login_required
@@ -409,6 +412,7 @@ def account():
     conn.close()
     return render_template('account.html', user=user)
 
+
 # Function to generate (or retrieve) QR code
 def get_or_create_qr_code(event_id):
     qr_code_path = os.path.join(QR_CODE_FOLDER, f"event_{event_id}.png")
@@ -425,12 +429,14 @@ def get_or_create_qr_code(event_id):
 
     return qr_code_path
 
+
 # Route: Serve QR Code
 @app.route("/qr_code/<int:event_id>")
 @login_required
 def serve_qr_code(event_id):
     qr_code_path = get_or_create_qr_code(event_id)
     return send_file(qr_code_path, mimetype="image/png")
+
 
 # **Route: Student Interface**
 @app.route("/student_checkin/<int:event_id>")
@@ -444,6 +450,7 @@ def student_interface(event_id):
     conn.close()
     event_name = event["eventName"]
     return render_template("student_checkin.html", eventID=event_id, eventName=event_name)
+
 
 # **API Routes for Student Check-In Email Verification**
 @app.route('/verify_email', methods=['POST'])
@@ -473,6 +480,7 @@ def send_email():
     except Exception as e:
         return str(e), 500
 
+
 @app.route('/verify_code', methods=['POST'])
 def verify_code():
     data = request.get_json()
@@ -485,6 +493,7 @@ def verify_code():
         return jsonify({'message': 'Code verified'}), 200
     else:
         return jsonify({'error': 'Invalid code'}), 400
+
 
 # **API Routes for Course & Professor Search**
 @app.route('/search_courses', methods=['GET'])
@@ -503,6 +512,7 @@ def search_courses():
     conn.close()
     return jsonify([row[0] for row in results])
 
+
 @app.route('/search_professors', methods=['GET'])
 def search_professors():
     """Search for professors based on user input."""
@@ -518,6 +528,7 @@ def search_professors():
     results = cursor.fetchall()
     conn.close()
     return jsonify([row[0] for row in results])
+
 
 @app.route('/submit_end_location', methods=['POST'])
 def submit_end_location():
@@ -551,6 +562,7 @@ def submit_end_location():
         return jsonify({'status': 'error', 'message': str(e)}), 500
     finally:
         conn.close()
+
 
 # **Functions for Generating and Sending Emails to Professors Post-Event**
 def haversine_distance(lat1, lon1, lat2, lon2):
@@ -636,6 +648,7 @@ def construct_email_records(event_id):
             })
 
     return emails
+
 
 def send_professor_emails(event_id):
     """
@@ -736,6 +749,7 @@ def send_professor_emails(event_id):
     conn.close()
     print("Updated events table for email sent")
 
+
 def reschedule_pending_emails():
     """
     On server restart, re-schedule any professor emails that haven't been sent
@@ -771,6 +785,7 @@ def reschedule_pending_emails():
             print(f"[RESCHEDULE ERROR] Could not reschedule email for event {event_id}: {e}")
 
     conn.close()
+
 
 @app.route("/submit_event", methods=["POST"])
 @login_required
@@ -972,17 +987,20 @@ def submit_event():
         print("✅ Reached submit_event(), is_recurring:", is_recurring)
         return redirect(url_for("dashboard", success=1))
 
-#Route: API endpoint for event list (returns JSON)
-@app.route("/api/events", methods=["GET"])
+
+# Route: API endpoint for event list (returns JSON)
+@app.route("/api/event/information", methods=["GET"])
 @login_required
-def get_events():
+def get_event_information():
     conn = get_db_connection()
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT eventID, eventName, eventDate, startTime, stopTime,
-               latitude, longitude
-        FROM events
+        SELECT e.eventID, e.eventName, e.eventDate, e.startTime, e.stopTime,
+               e.latitude, e.longitude, e.recurrenceType, e.isRecurring,
+               p.name AS place_name, p.building
+        FROM events e
+        LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
     """)
     events = cursor.fetchall()
     conn.close()
@@ -990,51 +1008,25 @@ def get_events():
     formatted_events = []
 
     for event in events:
-
         event_dict = dict(event)
 
-        # Base datetime
-        start_datetime = f"{event_dict['eventDate']}T{event_dict['startTime']}"
-        end_datetime = f"{event_dict['eventDate']}T{event_dict['stopTime']}" if event_dict["stopTime"] else None
-
-        # Add original event
-        formatted_events.append({
+        formatted_event = {
             "eventID": event_dict["eventID"],
             "eventName": event_dict["eventName"],
             "eventDate": event_dict["eventDate"],
-            "startTime": start_datetime,
-            "stopTime": end_datetime,
+            "startTime": event_dict["startTime"],
+            "stopTime": event_dict["stopTime"],
             "latitude": event_dict["latitude"],
-            "longitude": event_dict["longitude"]
-        })
+            "longitude": event_dict["longitude"],
+            "recurrenceType": event_dict["recurrenceType"] if event_dict["isRecurring"] else None,
+            "place_name": event_dict.get("place_name"),
+            "building": event_dict.get("building")
+        }
 
-        # Handle recurrence
-        if event_dict.get("isRecurring"):
-            recurrence_days = event_dict["recurrenceInterval"]
-            current_date = datetime.strptime(event_dict["eventDate"], "%Y-%m-%d").date()
-            event_time = datetime.strptime(event_dict["startTime"], "%H:%M:%S").time()
-
-            # Let's repeat it 5 more times (example)
-            for i in range(1, 6):
-                recur_date = current_date + timedelta(days=i * recurrence_days)
-                recur_start = datetime.combine(recur_date, event_time).isoformat()
-
-                recur_end = None
-                if event_dict["stopTime"]:
-                    stop_time = datetime.strptime(event_dict["stopTime"], "%H:%M:%S").time()
-                    recur_end = datetime.combine(recur_date, stop_time).isoformat()
-
-                formatted_events.append({
-                    "id": f"{event_dict['eventID']}_r{i}",
-                    "title": f"{event_dict['eventName']} (Recurring)",
-                    "start": recur_start,
-                    "end": recur_end,
-                    "latitude": event_dict["latitude"],
-                    "longitude": event_dict["longitude"],
-
-                })
+        formatted_events.append(formatted_event)
 
     return jsonify(formatted_events)
+
 
 @app.route("/submit_place", methods=["POST"])
 @login_required
@@ -1059,6 +1051,7 @@ def submit_place():
 
     return jsonify({"success": True, "message": "Place added successfully"})
 
+
 # Route: Fetch all places
 @app.route("/api/places", methods=["GET"])
 @login_required
@@ -1079,6 +1072,7 @@ def get_places():
         for place in places
     ]
     return jsonify(places_list)
+
 
 @app.route('/find_student', methods=['GET', 'POST'])
 @login_required
@@ -1130,10 +1124,12 @@ def find_student():
 
     return render_template('find_student.html', students=students)
 
+
 @app.route("/test_email/<int:event_id>")
 def test_send_professor_email(event_id):
     send_professor_emails(event_id)
     return f"Triggered professor email manually for event {event_id}"
+
 
 @app.route("/event_info/<int:event_id>")
 @login_required
@@ -1156,6 +1152,7 @@ def event_info(event_id):
         return render_template("event_info.html", event=event)
     else:
         return "Event not found", 404
+
 
 if __name__ == "__main__":
     reschedule_pending_emails()

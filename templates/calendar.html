@@ -89,7 +89,7 @@
 
 
             function loadEvents() {
-                fetch("/api/events")
+                fetch("/api/event/information")
                     .then(response => response.json())
                     .then(events => {
                         events.forEach(event => {
