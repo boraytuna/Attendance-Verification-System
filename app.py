@@ -12,16 +12,20 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import passlib, passlib.hash
 from passlib.hash import sha256_crypt
 from functools import wraps
+from uuid import uuid4
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
 
 app = Flask(__name__)
 
 DATABASE_NAME = "attendance.db"
 QR_CODE_FOLDER = "qr_codes"
 
-#session key
+# session key
 app.secret_key = os.urandom(24)
 
-#scheduler for scheduling professor attendance emails
+# scheduler for scheduling professor attendance emails
 scheduler = BackgroundScheduler()
 if not scheduler.running:
     scheduler.start()
@@ -34,14 +38,13 @@ app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USE_SSL'] = False
 app.config['MAIL_USERNAME'] = 'jrosestangle@gmail.com'
-app.config['MAIL_PASSWORD'] = 'pfdbqlrqisxzubmf' #app pw
+app.config['MAIL_PASSWORD'] = 'pfdbqlrqisxzubmf'  # app pw
 app.config['MAIL_DEFAULT_SENDER'] = 'jrosestangle@gmail.com'
 mail = Mail(app)
 
 if not os.path.exists(QR_CODE_FOLDER):
     os.makedirs(QR_CODE_FOLDER)
 
-GOOGLE_API_KEY = "AIzaSyAzf_3rNo5yi24L3Mu35o5VHaw1PwVmeTs"
 
 # Function to connect to SQLite
 def get_db_connection():
@@ -53,6 +56,7 @@ def get_db_connection():
     conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
     return conn
 
+
 # TEMPORARY - function to connect to fake DB
 def get_fakedb_connection():
     """
@@ -62,6 +66,7 @@ def get_fakedb_connection():
     conn.row_factory = sqlite3.Row  # Enables dictionary-style access
     conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
     return conn
+
 
 # Function to create tables
 def create_tables():
@@ -89,8 +94,14 @@ def create_tables():
             stopTime TIME NOT NULL,
             latitude REAL NOT NULL,
             longitude REAL NOT NULL,
-            eventAddress TEXT NOT NULL,
-            professorID INTEGER NOT NULL
+            professorID INTEGER NOT NULL,
+
+            -- New fields for recurring logic
+            isRecurring BOOLEAN DEFAULT 0,
+            recurrenceType TEXT,              -- daily, weekly, monthly
+            recurrenceStartDate DATE,         -- Start of the recurrence range
+            recurrenceEndDate DATE,           -- End of the recurrence range
+            recurrenceGroup TEXT              -- Shared ID for all events in a series
         )
     ''')
 
@@ -120,38 +131,43 @@ def create_tables():
                 name TEXT NOT NULL,
                 latitude REAL NOT NULL,
                 longitude REAL NOT NULL,
-                building TEXT NOT NULL,
-                address TEXT NULL
+                building TEXT NOT NULL
             )
         ''')
 
     conn.commit()
     conn.close()
 
+
 # Ensure database tables exist
 create_tables()
+
 
 def login_required(f):
     """
     Decorator that restricts access to a route unless the user is logged in.
     If a user is not logged in, they are redirected to the login page.
     """
+
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
             return redirect(url_for('login'))
         return f(*args, **kwargs)
+
     return decorated_function
+
 
 @app.route("/")
 def landing_page():
     """
     Flask route for the landing page.
-    
+
     Returns:
         the rendered landing page HTML template
     """
     return render_template("landing_page.html")
+
 
 @app.route("/signup")
 def signup():
@@ -162,6 +178,7 @@ def signup():
         the rendered signup page HTML template
     """
     return render_template("signup.html")
+
 
 @app.route("/submit_signup", methods=["POST"])
 def submit_signup():
@@ -205,6 +222,7 @@ def submit_signup():
     finally:
         conn.close()
 
+
 @app.route("/submit_login", methods=["POST"])
 def submit_login():
     """
@@ -247,6 +265,7 @@ def submit_login():
             "message": "Incorrect password."
         })
 
+
 @app.route("/login")
 def login():
     """
@@ -257,6 +276,7 @@ def login():
     """
     return render_template("login.html")
 
+
 @app.route("/submit_logout", methods=["POST"])
 def submit_logout():
     """
@@ -266,6 +286,7 @@ def submit_logout():
 
     # redirect to the landing page
     return redirect(url_for("landing_page"))
+
 
 @app.route("/dashboard")
 @login_required
@@ -311,8 +332,7 @@ def dashboard():
     conn.close()
     return render_template("dashboard.html", upcoming_events=upcoming, current_events=current, past_events=past)
 
-# Route: Events Page
-@app.route("/events", methods=["GET"])
+@app.route("/events")
 @login_required
 def events():
     conn = get_db_connection()
@@ -321,6 +341,7 @@ def events():
     events = cursor.fetchall()
     conn.close()
     return render_template("events.html", events=events)
+
 
 # Route: Calendar Page
 @app.route("/calendar")
@@ -351,7 +372,6 @@ def places():
     places = cursor.fetchall()
     conn.close()
     return render_template("places.html", places=places)
-
 
 @app.route('/account', methods=['GET', 'POST'])
 @login_required
@@ -397,9 +417,9 @@ def get_or_create_qr_code(event_id):
         return qr_code_path  # Return existing QR code
 
     # Generate new QR code that directs to the student interface
-    qr_url = f"http://127.0.0.1:5000/student_checkin/{event_id}" #temp - Boray was using on his laptop
-    #qr_url = f"http://192.168.1.100:5000/student_checkin/{event_id}" #temp - Joie was using this IP to test on her local network (address for home network)
-    #qr_url = f"http://172.20.10.12:5000/student_checkin/{event_id}" #temp - Joie was using this IP to test on her local network (address for phone hotspot)
+    qr_url = f"http://127.0.0.1:5000/student_checkin/{event_id}"  # temp - Boray was using on his laptop
+    # qr_url = f"http://192.168.1.100:5000/student_checkin/{event_id}" #temp - Joie was using this IP to test on her local network (address for home network)
+    # qr_url = f"http://172.20.10.12:5000/student_checkin/{event_id}" #temp - Joie was using this IP to test on her local network (address for phone hotspot)
     qr = segno.make(qr_url)
     qr.save(qr_code_path, scale=10)
 
@@ -417,9 +437,10 @@ def serve_qr_code(event_id):
 def student_interface(event_id):
     """Serve the student interface pages for a specific event.
     Pass the eventID and eventName to the HTML template."""
-    #get the event name associated with the eventID
+    # get the event name associated with the eventID
     conn = get_db_connection()
-    event = get_db_connection().cursor().execute("SELECT eventName FROM events WHERE eventID = ?", (event_id,)).fetchone()
+    event = get_db_connection().cursor().execute("SELECT eventName FROM events WHERE eventID = ?",
+                                                 (event_id,)).fetchone()
     conn.close()
     event_name = event["eventName"]
     return render_template("student_checkin.html", eventID=event_id, eventName=event_name)
@@ -430,17 +451,17 @@ def send_email():
     data = request.get_json()
     email = data.get('email')
 
-    #generate a random 6 digit code
+    # generate a random 6 digit code
     code = ''
     for i in range(6):
         num = random.randint(0, 9)
         code += str(num)
 
-    #store the code in the session
-    session['verification_code'] = code 
+    # store the code in the session
+    session['verification_code'] = code
 
     body_msg = 'Your email verification code for student check-in is: ' + code
-    msg = Message (
+    msg = Message(
         'Student Check-In Code',
         recipients=[email],
         body=body_msg
@@ -459,7 +480,7 @@ def verify_code():
 
     if 'verification_code' not in session:
         return jsonify({'error': 'Session expired'}), 400
-    
+
     if code == session['verification_code']:
         return jsonify({'message': 'Code verified'}), 200
     else:
@@ -469,13 +490,13 @@ def verify_code():
 @app.route('/search_courses', methods=['GET'])
 def search_courses():
     """Search for courses based on user input."""
-    #TEMPORARY - connect to fake DB
+    # TEMPORARY - connect to fake DB
     conn = sqlite3.connect("fake.db")
     conn.row_factory = sqlite3.Row  # Enables dictionary-style access
     conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
 
     search_term = request.args.get('query', '')
-    #conn = get_db_connection()
+    # conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT course_name FROM Courses WHERE course_name LIKE ?", (f"%{search_term}%",))
     results = cursor.fetchall()
@@ -485,114 +506,18 @@ def search_courses():
 @app.route('/search_professors', methods=['GET'])
 def search_professors():
     """Search for professors based on user input."""
-    #TEMPORARY - connect to fake DB
+    # TEMPORARY - connect to fake DB
     conn = sqlite3.connect("fake.db")
     conn.row_factory = sqlite3.Row  # Enables dictionary-style access
     conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
 
     search_term = request.args.get('query', '')
-    #conn = get_db_connection()
+    # conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT professor_name FROM Professor WHERE professor_name LIKE ?", (f"%{search_term}%",))
     results = cursor.fetchall()
     conn.close()
     return jsonify([row[0] for row in results])
-
-@app.route('/submit_student_checkin', methods=['POST'])
-def submit_student_checkin():
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'status': 'error', 'message': 'No data received'}), 400
-
-        # Extract fields safely
-        firstName = data.get('firstName', '').strip()
-        lastName = data.get('lastName', '').strip()
-        email = data.get('email', '').strip()
-        scannedEventID = data.get('scannedEventID')
-        studentLocation = data.get('studentLocation', '').strip()
-        deviceId = data.get('deviceId')
-        course_entries = data.get('courses', [])
-
-        # Basic validation
-        if not all([firstName, lastName, email, scannedEventID, studentLocation]):
-            return jsonify({'status': 'error', 'message': 'Missing required student fields'}), 400
-
-        scannedEventID = int(scannedEventID)
-
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        # ✅ Optional device restriction check
-        if ENFORCE_DEVICE_ID:
-            cursor.execute('''
-                SELECT 1 FROM student_checkins
-                WHERE scannedEventID = ? AND deviceId = ?
-            ''', (scannedEventID, deviceId))
-            if cursor.fetchone():
-                conn.close()
-                return jsonify({
-                    'status': 'error',
-                    'message': 'This device has already been used to check in for this event.'
-                }), 403
-
-        # Event info (for timestamp and grace logic)
-        cursor.execute('SELECT eventDate, startTime FROM events WHERE eventID = ?', (scannedEventID,))
-        event_row = cursor.fetchone()
-        if not event_row:
-            conn.close()
-            return jsonify({'status': 'error', 'message': 'Event not found'}), 404
-
-        event_start = datetime.strptime(f"{event_row['eventDate']} {event_row['startTime']}", "%Y-%m-%d %H:%M")
-        late_cutoff = event_start + timedelta(minutes=10)
-
-        responses = []
-
-        for entry in course_entries:
-            className = entry.get('className', '').strip()
-            professorName = entry.get('professorName', '').strip()
-
-            if not className or not professorName:
-                continue  # skip incomplete rows
-
-            # Insert the student check-in
-            cursor.execute('''
-                INSERT INTO student_checkins (
-                    firstName, lastName, email, classForExtraCredit,
-                    professorForExtraCredit, scannedEventID, studentLocation, deviceId
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                firstName, lastName, email, className,
-                professorName, scannedEventID, studentLocation, deviceId
-            ))
-
-            # Fetch timestamp to determine attendance status
-            cursor.execute('''
-                SELECT checkinID, checkinTime FROM student_checkins
-                WHERE email = ? AND scannedEventID = ? AND lastName = ?
-                AND classForExtraCredit = ? AND professorForExtraCredit = ?
-                ORDER BY checkinTime DESC LIMIT 1
-            ''', (email, scannedEventID, lastName, className, professorName))
-            result = cursor.fetchone()
-
-            if result:
-                checkin_time = datetime.strptime(result["checkinTime"], "%Y-%m-%d %H:%M:%S")
-                status = "Attended Late" if checkin_time > late_cutoff else "Attended"
-                responses.append({
-                    "class": className,
-                    "professor": professorName,
-                    "status": status
-                })
-
-        conn.commit()
-        conn.close()
-
-        return jsonify({'status': 'success', 'entries': responses})
-
-    except Exception as e:
-        import traceback
-        print("🔥 Exception in /submit_student_checkin:", traceback.format_exc())
-        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/submit_end_location', methods=['POST'])
 def submit_end_location():
@@ -639,12 +564,14 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
 
+
 def parse_location(location_str):
     try:
         lat_str, lon_str = location_str.split(",")
         return float(lat_str.strip()), float(lon_str.strip())
     except Exception:
         return None, None
+
 
 def construct_email_records(event_id):
     """
@@ -767,7 +694,6 @@ def send_professor_emails(event_id):
                     </tr>
         '''
 
-
         for s in student_rows:
             html_msg += f'''
                 <tr>
@@ -849,125 +775,204 @@ def reschedule_pending_emails():
 @app.route("/submit_event", methods=["POST"])
 @login_required
 def submit_event():
-    event_name = request.form["event_name"]
-    event_date = request.form["event_date"]
-    start_time = request.form["start_time"]
-    stop_time = request.form["stop_time"]
-    event_location = request.form["event_location"]
-    event_address = request.form.get("event_address", "Unknown Location")
-    recurrence = request.form.get("recurrence", "none")
+    print("📩 HIT THE ROUTE")
+    print("FORM:", dict(request.form))
 
-    
+    # Collect and log form data
+    event_name = request.form.get("event_name", "").strip()
+    event_date = request.form.get("event_date")
+    start_time = request.form.get("start_time")
+    stop_time = request.form.get("stop_time")
+    event_location = request.form.get("event_location")
+    is_recurring = request.form.get("is_recurring") == "true"
 
+    recurrence_type = request.form.get("recurrence", "none")
+    # 🔒 Block if recurrence type is 'none' but user selected recurring (unless they confirmed)
+    if is_recurring and recurrence_type == "none" and "recurrence_warning_acknowledged" not in request.form:
+        logging.warning("❌ Recurring selected but recurrence type is 'none'. Blocking creation.")
+        flash(
+            "❌ Event was not saved. You selected 'Recurring' but chose 'Does not repeat'. Please select a repeat type and try again.",
+            "error")
+        return redirect(url_for("events"))
+    recurrence_start = request.form.get("recurrence_start_date")
+    recurrence_end = request.form.get("recurrence_end_date")
+    professor_id = session.get("user_id")
 
-     # Convert date to datetime object
-    event_date_obj = datetime.strptime(event_date, "%Y-%m-%d")
-    
-    professor_id = session.get("user_id")  # NEW: Associate with logged-in professor
+    logging.debug(f"Event Name: {event_name}")
+    logging.debug(f"Recurring: {is_recurring}, Type: {recurrence_type}")
+    logging.debug(f"Recurrence Range: {recurrence_start} to {recurrence_end}")
 
-    # Parse location
+    # Validate and parse coordinates
     try:
         lat, lng = map(float, event_location.split(","))
-    except ValueError:
+        logging.debug(f"Parsed location: {lat}, {lng}")
+    except Exception as e:
+        logging.error(f"❌ Invalid location format: {e}")
         flash("❌ Invalid location format.", "error")
-        return redirect(url_for("events"))
-
-    # Validate time logic
-    if start_time >= stop_time:
-        flash("❌ End time must be later than start time.", "error")
         return redirect(url_for("events"))
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Check for duplicate event
+    # Verify that this location exists in places table
     cursor.execute("""
-        SELECT * FROM events 
-        WHERE eventDate = ? 
-        AND ROUND(latitude, 6) = ROUND(?, 6) 
-        AND ROUND(longitude, 6) = ROUND(?, 6)
-        AND (
-            (? BETWEEN startTime AND stopTime) OR 
-            (? BETWEEN startTime AND stopTime) OR 
-            (startTime BETWEEN ? AND ?) OR 
-            (stopTime BETWEEN ? AND ?)
-        )
-    """, (
-        event_date, lat, lng,
-        start_time, stop_time, start_time, stop_time, start_time, stop_time
-    ))
+        SELECT * FROM places 
+        WHERE ROUND(latitude, 6) = ROUND(?, 6) AND ROUND(longitude, 6) = ROUND(?, 6)
+    """, (lat, lng))
+    place = cursor.fetchone()
 
-    if cursor.fetchone():
-        conn.close()
-        flash("❌ Another event is already scheduled at this time and location.", "error")
+    if not place:
+        logging.warning("❌ Location does not match any known place.")
+        flash("❌ Selected location does not match a saved place.", "error")
         return redirect(url_for("events"))
 
-    # Insert event (✅ includes professorID now)
-    cursor.execute('''
-        INSERT INTO events (
-            eventName, eventDate, startTime, stopTime,
-            latitude, longitude, eventAddress, professorID
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (event_name, event_date, start_time, stop_time, lat, lng, event_address, professor_id))
-   
+    # Validate time logic
+    if start_time >= stop_time:
+        logging.warning("Start time >= stop time")
+        flash("❌ End time must be later than start time.", "error")
+        return redirect(url_for("events"))
 
-    # Generate recurring dates
-    recurrence = request.form.get("recurrence", "none").lower()
-    event_date_obj = datetime.strptime(event_date, "%Y-%m-%d")
-    occurrences = [event_date_obj]
-    if recurrence in ["daily", "weekly", "monthly"]:
-        for i in range(1, 10):  # generate 10 future occurrences
-            if recurrence == "daily":
-                occurrences.append(event_date_obj + timedelta(days=i))
-            elif recurrence == "weekly":
-                occurrences.append(event_date_obj + timedelta(weeks=i))
-            elif recurrence == "monthly":
-                next_month = event_date_obj.month + i
-                year = event_date_obj.year + (next_month - 1) // 12
-                month = (next_month - 1) % 12 + 1
+    # Verify the place exists in the DB
+    cursor.execute("""
+        SELECT * FROM places 
+        WHERE ROUND(latitude, 6) = ROUND(?, 6) AND ROUND(longitude, 6) = ROUND(?, 6)
+    """, (lat, lng))
+    place = cursor.fetchone()
+
+    if not place:
+        conn.close()
+        logging.error("❌ Location does not match a saved place")
+        flash("❌ Selected location does not match any saved place.", "error")
+        return redirect(url_for("events"))
+
+    # --- RECURRING EVENT HANDLING ---
+    if is_recurring:
+        logging.debug("🔄 Processing as RECURRING event")
+        try:
+            start_date = datetime.strptime(recurrence_start, "%Y-%m-%d")
+            end_date = datetime.strptime(recurrence_end, "%Y-%m-%d")
+            assert start_date <= end_date
+        except Exception as e:
+            conn.close()
+            logging.error(f"❌ Recurrence date error: {e}")
+            flash("❌ Invalid recurrence date range.", "error")
+            return redirect(url_for("events"))
+
+        recurrence_group = str(uuid4())
+        logging.debug(f"Recurrence Group ID: {recurrence_group}")
+        current_date = start_date
+
+        while current_date <= end_date:
+            cursor.execute('''
+                INSERT INTO events (
+                    eventName, eventDate, startTime, stopTime,
+                    latitude, longitude, professorID,
+                    isRecurring, recurrenceType, recurrenceStartDate,
+                    recurrenceEndDate, recurrenceGroup
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                event_name,
+                current_date.strftime("%Y-%m-%d"),
+                start_time, stop_time,
+                lat, lng, professor_id,
+                True, recurrence_type,
+                recurrence_start, recurrence_end,
+                recurrence_group
+            ))
+
+            event_id = cursor.lastrowid
+            logging.debug(f"✅ Inserted recurring event for {current_date.date()} (Event ID: {event_id})")
+            get_or_create_qr_code(event_id)
+
+            # Advance to next occurrence
+            if recurrence_type == "daily":
+                current_date += timedelta(days=1)
+            elif recurrence_type == "weekly":
+                current_date += timedelta(weeks=1)
+            elif recurrence_type == "monthly":
+                month = current_date.month + 1
+                year = current_date.year + (month - 1) // 12
+                month = (month - 1) % 12 + 1
                 try:
-                    occurrences.append(event_date_obj.replace(year=year, month=month))
+                    current_date = current_date.replace(year=year, month=month)
                 except ValueError:
-                    # skip invalid dates like February 30th
-                    continue
+                    current_date = current_date.replace(day=1, year=year, month=month) + timedelta(days=31)
 
-    for date in occurrences[1:]:
+        conn.commit()
+        conn.close()
+        logging.debug("✅ All recurring events committed successfully")
+        return redirect(url_for("events", success=1))
+
+    # --- SINGLE EVENT HANDLING ---
+    else:
+        logging.debug("📅 Processing as single event")
+        try:
+            event_date_obj = datetime.strptime(event_date, "%Y-%m-%d")
+        except Exception as e:
+            conn.close()
+            logging.error(f"❌ Invalid event date: {e}")
+            flash("❌ Invalid event date.", "error")
+            return redirect(url_for("events"))
+
+        # Check for duplicate event at same time/location
+        cursor.execute("""
+            SELECT * FROM events 
+            WHERE eventDate = ? 
+            AND ROUND(latitude, 6) = ROUND(?, 6) 
+            AND ROUND(longitude, 6) = ROUND(?, 6)
+            AND (
+                (? BETWEEN startTime AND stopTime) OR 
+                (? BETWEEN startTime AND stopTime) OR 
+                (startTime BETWEEN ? AND ?) OR 
+                (stopTime BETWEEN ? AND ?)
+            )
+        """, (
+            event_date, lat, lng,
+            start_time, stop_time, start_time, stop_time, start_time, stop_time
+        ))
+
+        if cursor.fetchone():
+            conn.close()
+            logging.warning("❌ Duplicate detected at this time and location")
+            flash("❌ Another event is already scheduled at this time and location.", "error")
+            return redirect(url_for("events"))
+
         cursor.execute('''
-            INSERT INTO events (eventName, eventDate, startTime, stopTime, latitude, longitude, eventAddress)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (event_name, date.strftime("%Y-%m-%d"), start_time, stop_time, lat, lng, event_address))
-
+            INSERT INTO events (
+                eventName, eventDate, startTime, stopTime,
+                latitude, longitude, professorID
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (event_name, event_date, start_time, stop_time, lat, lng, professor_id))
 
         event_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        logging.debug(f"✅ Event {event_id} inserted successfully")
+
         get_or_create_qr_code(event_id)
 
-    event_id = cursor.lastrowid
+        # Optional: Schedule email 5 mins after event ends
+        try:
+            event_end_str = f"{event_date} {stop_time}"
+            event_end_dt = datetime.strptime(event_end_str, "%Y-%m-%d %H:%M")
+            execute_time = event_end_dt + timedelta(minutes=5)
 
-    conn.commit()
-    conn.close()
+            scheduler.add_job(
+                func=send_professor_emails,
+                trigger='date',
+                run_date=execute_time,
+                args=[event_id],
+                id=f"professor_email_{event_id}",
+                replace_existing=True
+            )
+            logging.debug(f"📧 Email job scheduled for Event ID {event_id}")
+        except Exception as e:
+            logging.error(f"[SCHEDULER ERROR] Could not schedule email: {e}")
 
-    get_or_create_qr_code(event_id)
+        print("✅ Reached submit_event(), is_recurring:", is_recurring)
+        return redirect(url_for("dashboard", success=1))
 
-    # Schedule professor email 5 minutes after event ends
-    try:
-        event_end_str = f"{event_date} {stop_time}"
-        event_end_dt = datetime.strptime(event_end_str, "%Y-%m-%d %H:%M")
-        execute_time = event_end_dt + timedelta(minutes=5)
-
-        scheduler.add_job(
-            func=send_professor_emails,
-            trigger='date',
-            run_date=execute_time,
-            args=[event_id],
-            id=f"professor_email_{event_id}",
-            replace_existing=True
-        )
-    except Exception as e:
-        print(f"[SCHEDULER ERROR] Could not schedule email: {e}")
-
-    return redirect(url_for("dashboard", success=1))
-
-# Route: API endpoint for event list (returns JSON)
+#Route: API endpoint for event list (returns JSON)
 @app.route("/api/events", methods=["GET"])
 @login_required
 def get_events():
@@ -976,7 +981,7 @@ def get_events():
 
     cursor.execute("""
         SELECT eventID, eventName, eventDate, startTime, stopTime,
-               latitude, longitude, eventAddress
+               latitude, longitude
         FROM events
     """)
     events = cursor.fetchall()
@@ -998,8 +1003,7 @@ def get_events():
             "eventName": event_dict["eventName"],
             "eventDate": event_dict["eventDate"],
             "startTime": start_datetime,
-            "stopTime":end_datetime,
-            "location": event_dict["eventAddress"],
+            "stopTime": end_datetime,
             "latitude": event_dict["latitude"],
             "longitude": event_dict["longitude"]
         })
@@ -1025,13 +1029,12 @@ def get_events():
                     "title": f"{event_dict['eventName']} (Recurring)",
                     "start": recur_start,
                     "end": recur_end,
-                            "latitude": event_dict["latitude"],
+                    "latitude": event_dict["latitude"],
                     "longitude": event_dict["longitude"],
-            "eventAddress": event_dict["eventAddress"]
+
                 })
 
     return jsonify(formatted_events)
-
 
 @app.route("/submit_place", methods=["POST"])
 @login_required
@@ -1041,7 +1044,6 @@ def submit_place():
     building = data.get("building")
     latitude = data.get("latitude")
     longitude = data.get("longitude")
-    address = data.get("address", "Unknown Address")
 
     if not name or not building or not latitude or not longitude:
         return jsonify({"success": False, "message": "Missing required fields"}), 400
@@ -1049,8 +1051,8 @@ def submit_place():
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO places (name, building, latitude, longitude, address) VALUES (?, ?, ?, ?, ?)",
-        (name, building, latitude, longitude, address)
+        "INSERT INTO places (name, building, latitude, longitude) VALUES (?, ?, ?, ?)",
+        (name, building, latitude, longitude)
     )
     conn.commit()
     conn.close()
@@ -1128,10 +1130,6 @@ def find_student():
 
     return render_template('find_student.html', students=students)
 
-
-
-
-
 @app.route("/test_email/<int:event_id>")
 def test_send_professor_email(event_id):
     send_professor_emails(event_id)
@@ -1158,8 +1156,6 @@ def event_info(event_id):
         return render_template("event_info.html", event=event)
     else:
         return "Event not found", 404
-
-
 
 if __name__ == "__main__":
     reschedule_pending_emails()

@@ -38,6 +38,11 @@
     text-align: left;
 }
 
+.today-highlight {
+    background-color: #fff3cd;
+    border: 2px solid #ffc107;
+    border-radius: 10px;
+}
 
 .empty {
     background-color: #eee;
