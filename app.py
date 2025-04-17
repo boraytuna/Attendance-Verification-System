@@ -444,10 +444,10 @@ def student_interface(event_id):
     """Serve the student interface pages for a specific event.
     Pass the eventID and eventName to the HTML template."""
     # get the event name associated with the eventID
-    conn = get_db_connection()
-    event = get_db_connection().cursor().execute("SELECT eventName FROM events WHERE eventID = ?",
-                                                 (event_id,)).fetchone()
-    conn.close()
+    cursor = get_db_connection().cursor()
+    event = cursor.execute("SELECT eventName FROM events WHERE eventID = ?", (event_id,)).fetchone()
+    if not event:
+        return "Event not found", 404
     event_name = event["eventName"]
     return render_template("student_checkin.html", eventID=event_id, eventName=event_name)
 
@@ -530,21 +530,127 @@ def search_professors():
     return jsonify([row[0] for row in results])
 
 
+@app.route('/submit_student_checkin', methods=['POST'])
+def submit_student_checkin():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'status': 'error', 'message': 'No data received'}), 400
+
+        firstName = data.get('firstName', '').strip()
+        lastName = data.get('lastName', '').strip()
+        email = data.get('email', '').strip()
+        scannedEventID = data.get('scannedEventID')
+        studentLocation = data.get('studentLocation', '').strip()
+        deviceId = data.get('deviceId')
+        course_entries = data.get('courses', [])
+
+        if not all([firstName, lastName, email, scannedEventID, studentLocation]):
+            return jsonify({'status': 'error', 'message': 'Missing required student fields'}), 400
+
+        try:
+            scannedEventID = int(scannedEventID)
+        except ValueError:
+            return jsonify({'status': 'error', 'message': 'Invalid scannedEventID'}), 400
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Optional: Prevent multiple check-ins from same device for same event
+        if ENFORCE_DEVICE_ID:
+            cursor.execute('''
+                SELECT 1 FROM student_checkins
+                WHERE scannedEventID = ? AND deviceId = ?
+            ''', (scannedEventID, deviceId))
+            if cursor.fetchone():
+                conn.close()
+                return jsonify({
+                    'status': 'error',
+                    'message': 'This device has already been used to check in for this event.'
+                }), 403
+
+        # Validate that event exists
+        cursor.execute('SELECT eventDate, startTime FROM events WHERE eventID = ?', (scannedEventID,))
+        event_row = cursor.fetchone()
+        if not event_row:
+            conn.close()
+            return jsonify({'status': 'error', 'message': 'Event not found'}), 404
+
+        event_start = datetime.strptime(f"{event_row['eventDate']} {event_row['startTime']}", "%Y-%m-%d %H:%M")
+        late_cutoff = event_start + timedelta(minutes=10)
+
+        responses = []
+
+        for entry in course_entries:
+            className = entry.get('className', '').strip()
+            professorName = entry.get('professorName', '').strip()
+
+            if not className or not professorName:
+                continue
+
+            # Insert new check-in record
+            cursor.execute('''
+                INSERT INTO student_checkins (
+                    firstName, lastName, email, classForExtraCredit,
+                    professorForExtraCredit, scannedEventID, studentLocation, deviceId
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                firstName, lastName, email, className,
+                professorName, scannedEventID, studentLocation, deviceId
+            ))
+
+            # Get inserted time
+            cursor.execute('''
+                SELECT checkinID, checkinTime FROM student_checkins
+                WHERE email = ? AND scannedEventID = ? AND lastName = ?
+                  AND classForExtraCredit = ? AND professorForExtraCredit = ?
+                ORDER BY checkinTime DESC LIMIT 1
+            ''', (email, scannedEventID, lastName, className, professorName))
+            result = cursor.fetchone()
+
+            if result:
+                checkin_time = datetime.strptime(result["checkinTime"], "%Y-%m-%d %H:%M:%S")
+                status = "Attended Late" if checkin_time > late_cutoff else "Attended"
+                responses.append({
+                    "class": className,
+                    "professor": professorName,
+                    "status": status
+                })
+        conn.commit()
+        conn.close()
+
+        return jsonify({'status': 'success', 'entries': responses})
+
+    except Exception as e:
+        import traceback
+        print("🔥 Exception in /submit_student_checkin:", traceback.format_exc())
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 @app.route('/submit_end_location', methods=['POST'])
 def submit_end_location():
     print("📍 /submit_end_location called")
     data = request.json
-    email = data.get('email')
-    scannedEventID = int(data.get('scannedEventID'))
-    endLocation = str(data.get('endLocation'))
-    endTime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    lastName = data.get('lastName')
-
-    conn = get_db_connection()
-    cursor = conn.cursor()
 
     try:
-        # 🔁 Update all matching rows that haven't been updated yet
+        email = data.get('email', '').strip()
+        lastName = data.get('lastName', '').strip()
+        scannedEventID = data.get('scannedEventID')
+        endLocation = str(data.get('endLocation', '')).strip()
+        endTime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        # Validate input
+        if not all([email, lastName, scannedEventID, endLocation]):
+            return jsonify({'status': 'error', 'message': 'Missing required fields'}), 400
+
+        try:
+            scannedEventID = int(scannedEventID)
+        except ValueError:
+            return jsonify({'status': 'error', 'message': 'Invalid scannedEventID'}), 400
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Update all matching check-ins without an endLocation
         cursor.execute('''
             UPDATE student_checkins
             SET endLocation = ?, endTime = ?
@@ -554,14 +660,16 @@ def submit_end_location():
 
         updated_count = cursor.rowcount
         conn.commit()
-        print(f"✅ Updated {updated_count} rows with end location.")
 
+        print(f"✅ Updated {updated_count} rows with end location.")
         return jsonify({'status': 'success', 'updated': updated_count})
+
     except Exception as e:
         print(f"❌ Error updating end location: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
     finally:
         conn.close()
+
 
 
 # **Functions for Generating and Sending Emails to Professors Post-Event**
