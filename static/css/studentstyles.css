@@ -134,3 +134,33 @@ table, td:last-child, th:last-child {
     border-top: none;
     border-bottom: none;
 }
+
+#emailSentNotice {
+    box-sizing: border-box;
+    width: 100%;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    line-height: 1.4;
+}
+
+#emailSentNotice p {
+    margin: 0 0 10px;
+    word-break: break-word;
+    font-size: 0.95rem;
+}
+
+#resendEmailBtn {
+    width: 100%;
+    padding: 12px;
+    font-size: 1rem;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+#resendEmailBtn:disabled {
+    background-color: #cfd6e1;
+    cursor: not-allowed;
+}

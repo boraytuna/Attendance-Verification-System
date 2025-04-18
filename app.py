@@ -480,6 +480,41 @@ def send_email():
     except Exception as e:
         return str(e), 500
 
+@app.route('/resend_verification_email', methods=['POST'])
+def resend_email():
+    data = request.get_json()
+    email = data.get('email')
+
+    COOLDOWN_SECONDS = 180
+
+    code = session.get('verification_code')
+    last_sent = session.get('last_verification_email_sent')
+
+    if not code:
+        return jsonify({'error': 'No verification code found. Please restart the process.'}), 400
+
+    # Check cooldown
+    if last_sent:
+        last_sent_time = datetime.strptime(last_sent, "%Y-%m-%d %H:%M:%S")
+        if datetime.now() < last_sent_time + timedelta(seconds=COOLDOWN_SECONDS):
+            remaining = (last_sent_time + timedelta(seconds=COOLDOWN_SECONDS)) - datetime.now()
+            return jsonify({
+                'error': f'Please wait {int(remaining.total_seconds())} more seconds before resending.'
+            }), 429
+
+    msg = Message(
+        'Student Check-In Code (Resend)',
+        recipients=[email],
+        body=f'Your email verification code is: {code}'
+    )
+
+    try:
+        mail.send(msg)
+        session['last_verification_email_sent'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return jsonify({'message': 'Verification code resent.'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 @app.route('/verify_code', methods=['POST'])
 def verify_code():

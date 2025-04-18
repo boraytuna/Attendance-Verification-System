@@ -6,7 +6,14 @@ document.addEventListener("DOMContentLoaded", function () {
     const privacyPolicy = document.getElementById("privacyPolicy");
     const btnAllowLocation = document.getElementById("btnAllowLocation");
     const btnSubmitEndLocation = document.getElementById("btnSubmitEndLocation");
+    const emailNotice = document.getElementById("emailSentNotice");
+    const resendBtn = document.getElementById("resendEmailBtn");
+    const timerSpan = document.getElementById("resendTimer");
+    let sendingInProgress = false;
     let locationCaptured = false;
+
+    let classSelectInstance;
+    let profSelectInstance;
 
     let frameState = sessionStorage.getItem("frameState");
     let emailVerified = sessionStorage.getItem("emailVerified") === "true";
@@ -302,16 +309,12 @@ document.addEventListener("DOMContentLoaded", function () {
 
     function createNewTableRow() {
         try {
-            const classInput = document.getElementById("className");
-            const professorInput = document.getElementById("professorName");
-
-            const classVal = classInput.value.trim();
-            const professorVal = professorInput.value.trim();
+            const classVal = classSelectInstance?.getValue().trim();
+            const professorVal = profSelectInstance?.getValue().trim();
 
             if (!classVal || !professorVal) return false;
 
             let newTableRow = document.createElement("tr");
-            table.appendChild(newTableRow);
             newTableRow.setAttribute("id", "tableRow");
 
             let newCourseCell = document.createElement("td");
@@ -334,21 +337,17 @@ document.addEventListener("DOMContentLoaded", function () {
                 saveFormData();
             });
 
-            // ✅ Clear inputs after adding
-            classInput.value = "";
-            professorInput.value = "";
-            document.getElementById("addRowToTable").disabled = true;
+            document.getElementById("tableBody").appendChild(newTableRow);
+            saveFormData();
 
-            // ✅ Also clear TomSelect values
-            if (window.TomSelect) {
-                if (TomSelect.instances["className"]) TomSelect.instances["className"].clear();
-                if (TomSelect.instances["professorName"]) TomSelect.instances["professorName"].clear();
-            }
+            // ✅ Clear both selects and update button
+            classSelectInstance.clear();
+            profSelectInstance.clear();
+            toggleAddRowButton();
 
-            saveFormData(); // ✅ Save after addition
             return true;
-        } catch (error) {
-            console.error("❌ Error adding row:", error);
+        } catch (err) {
+            console.error("❌ createNewTableRow failed:", err);
             return false;
         }
     }
@@ -388,29 +387,87 @@ document.addEventListener("DOMContentLoaded", function () {
     document.getElementById("btnSubmitFrame1").addEventListener("click", function (e) {
         e.preventDefault();
 
+        if (sendingInProgress) return;
+        sendingInProgress = true;
+
         const firstName = document.getElementById("firstName").value.trim();
         const lastName = document.getElementById("lastName").value.trim();
         const email = document.getElementById("studentEmail").value.trim();
 
         if (!firstName || !lastName || !email) {
             alert("Please fill out your first name, last name, and student email before continuing.");
+            sendingInProgress = false;
             return;
         }
+
+        const button = document.getElementById("btnSubmitFrame1");
+        button.disabled = true;
+        button.innerText = "Sending...";
 
         cachedStudent.email = email;
         cachedStudent.lastName = lastName;
         cachedStudent.scannedEventID = window.location.pathname.split('/')[2];
 
-        fetch('/verify_email', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({email: email})
-        })
-            .then(response => response.text())
-            .catch(error => console.error('Error:', error));
+        if (emailNotice && resendBtn && timerSpan) {
+            fetch('/verify_email', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({email: email})
+            })
+                .then(response => response.text())
+                .then(() => {
+                    showFrame(1);
+                    sessionStorage.setItem("frameState", 1);
 
-        showFrame(1);
-        sessionStorage.setItem("frameState", 1);
+                    function startResendCountdown(seconds) {
+                        resendBtn.disabled = true;
+                        let remaining = seconds;
+
+                        const interval = setInterval(() => {
+                            const mins = Math.floor(remaining / 60);
+                            const secs = remaining % 60;
+                            timerSpan.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+                            remaining--;
+
+                            if (remaining < 0) {
+                                clearInterval(interval);
+                                resendBtn.disabled = false;
+                                timerSpan.textContent = "Ready to resend.";
+                            }
+                        }, 1000);
+                    }
+
+                    resendBtn.addEventListener("click", () => {
+                        fetch("/resend_verification_email", {
+                            method: "POST",
+                            headers: {"Content-Type": "application/json"},
+                            body: JSON.stringify({email: document.getElementById("studentEmail").value})
+                        })
+                            .then(res => {
+                                if (res.ok) {
+                                    startResendCountdown(180);
+                                    alert("Verification email resent!");
+                                } else {
+                                    alert("Failed to resend email.");
+                                }
+                            });
+                    });
+
+                    emailNotice.style.display = "block";
+                    startResendCountdown(180);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                })
+                .finally(() => {
+                    sendingInProgress = false;
+                    button.disabled = false;
+                    button.innerText = "Verify Email";
+                });
+        } else {
+            console.error("Missing email notice elements in DOM.");
+            sendingInProgress = false;
+        }
     });
     document.getElementById("btnSubmitFrame2").addEventListener("click", function (e) {
         e.preventDefault();
@@ -454,14 +511,8 @@ document.addEventListener("DOMContentLoaded", function () {
             .catch(error => console.error('Error:', error));
     });
     document.getElementById("addRowToTable").addEventListener("click", function (event) {
-        event.preventDefault(); //prevent default form submission
-        if (createNewTableRow()) {
-            //clear input fields after adding to table
-            document.getElementById("className").value = "";
-            document.getElementById("professorName").value = "";
-            //disable add button
-            document.getElementById("addRowToTable").disabled = true;
-        }
+        event.preventDefault();
+        createNewTableRow();
     });
     document.getElementById("className").addEventListener("change", toggleAddRowButton);
     document.getElementById("professorName").addEventListener("change", toggleAddRowButton);
@@ -504,7 +555,7 @@ document.addEventListener("DOMContentLoaded", function () {
     fetch('/search_courses?query=')
         .then(res => res.json())
         .then(data => {
-            new TomSelect("#className", {
+            classSelectInstance = new TomSelect("#className", {
                 placeholder: "Select or type a class name...",
                 create: true,
                 maxItems: 1,
@@ -515,11 +566,11 @@ document.addEventListener("DOMContentLoaded", function () {
             });
         });
 
-    // Load professors
+// Load professors
     fetch('/search_professors?query=')
         .then(res => res.json())
         .then(data => {
-            new TomSelect("#professorName", {
+            profSelectInstance = new TomSelect("#professorName", {
                 placeholder: "Select or type a professor name...",
                 create: true,
                 maxItems: 1,
