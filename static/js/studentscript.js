@@ -6,7 +6,27 @@ document.addEventListener("DOMContentLoaded", function () {
     const privacyPolicy = document.getElementById("privacyPolicy");
     const btnAllowLocation = document.getElementById("btnAllowLocation");
     const btnSubmitEndLocation = document.getElementById("btnSubmitEndLocation");
+    const emailNotice = document.getElementById("emailSentNotice");
+    const resendBtn = document.getElementById("resendEmailBtn");
+    const timerSpan = document.getElementById("resendTimer");
+    let sendingInProgress = false;
     let locationCaptured = false;
+
+    let classSelectInstance;
+    let profSelectInstance;
+
+    let frameState = sessionStorage.getItem("frameState");
+    let emailVerified = sessionStorage.getItem("emailVerified") === "true";
+
+    // Logic for deciding which frame to show
+    if (frameState === "4") {
+        showFrame(3); // Frame 4 is index 3
+    } else if (frameState === "3" && emailVerified) {
+        showFrame(2); // Frame 3 is index 2
+    } else {
+        showFrame(0); // Everything else redirects to Frame 1
+    }
+
 
     let cachedStudent = JSON.parse(sessionStorage.getItem("cachedStudent")) || {
         email: '',
@@ -14,9 +34,15 @@ document.addEventListener("DOMContentLoaded", function () {
         scannedEventID: ''
     };
 
-    const savedFrame = parseInt(sessionStorage.getItem("currentFrame"));
+    if (!cachedStudent.scannedEventID) {
+        const pathParts = window.location.pathname.split('/');
+        if (pathParts.includes("student_checkin")) {
+            cachedStudent.scannedEventID = pathParts[pathParts.indexOf("student_checkin") + 1];
+            sessionStorage.setItem("cachedStudent", JSON.stringify(cachedStudent));
+        }
+    }
 
-    showFrame(!isNaN(savedFrame) ? savedFrame : 0);
+
     window.addEventListener("beforeunload", () => {
         if (currentFrameIndex >= 2) {
             sessionStorage.setItem("currentFrame", currentFrameIndex.toString());
@@ -117,6 +143,22 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     function getLocationAndSubmit() {
+        const classInput = document.getElementById("className").value.trim();
+        const profInput = document.getElementById("professorName").value.trim();
+
+        // 🛑 Warn user about unsubmitted class/professor
+        if ((classInput || profInput) && classInput !== "" && profInput !== "") {
+            const confirmSkip = confirm("You have a class and professor selected that haven't been added to the table. Do you want to continue without adding them?");
+            if (!confirmSkip) return;
+        }
+
+        // 🛑 Ensure at least one course is added to the table
+        const rows = document.querySelectorAll("#tableBody tr:not(#tableHeader)");
+        if (rows.length === 0) {
+            alert("You must add at least one course with a professor before submitting.");
+            return;
+        }
+
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 function (position) {
@@ -125,7 +167,6 @@ document.addEventListener("DOMContentLoaded", function () {
                     let capturedStudentLocation = `${lat},${lon}`;
                     locationCaptured = true;
 
-                    // ✅ Insert this check
                     cachedStudent.firstName = document.getElementById("firstName").value.trim();
                     cachedStudent.lastName = document.getElementById("lastName").value.trim();
                     cachedStudent.email = document.getElementById("studentEmail").value.trim();
@@ -142,7 +183,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     console.error("📍 Geolocation error:", error);
                     handleGeolocationError(error);
                 },
-                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+                {enableHighAccuracy: true, timeout: 15000, maximumAge: 0}
             );
         } else {
             alert("Geolocation not supported by your browser.");
@@ -175,36 +216,41 @@ document.addEventListener("DOMContentLoaded", function () {
 
         fetch('/submit_student_checkin', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(formData)
         })
-        .then(async response => {
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(errorText);
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.status === "success") {
-                alert("Check-in successful!");
-                sessionStorage.setItem("cachedStudent", JSON.stringify(cachedStudent));
-                document.getElementById("errorMessage").style.display = "none";
-                showFrame(3);
-            } else {
-                const reason = data.message || "Check-in failed. Please try again.";
-                showError(reason);
-            }
-        })
-        .catch(error => {
-            const msg = error.message.toLowerCase();
-            if (msg.includes("device already used")) {
-                showErrorWithRestart("🚫 This device has already been used to check in. Please contact the event organizer.");
-            } else {
-                console.error("🚨 Fetch failed:", error);
-                showError("Network or server error:\n" + error.message);
-            }
-        });
+            .then(async response => {
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.status === "success") {
+                    alert("Check-in successful!");
+                    sessionStorage.setItem("cachedStudent", JSON.stringify(cachedStudent));
+                    document.getElementById("errorMessage").style.display = "none";
+                    showFrame(3);
+                    sessionStorage.setItem("frameState", 3);
+                } else {
+                    const reason = data.message || "Check-in failed. Please try again.";
+                    showError(reason);
+                }
+            })
+            .catch(async error => {
+                try {
+                    const parsed = JSON.parse(error.message);
+                    if (parsed.message && parsed.message.toLowerCase().includes("device has already been used")) {
+                        showErrorWithRestart("🚫 This device has already been used to check in. Please contact the event organizer.");
+                    } else {
+                        showError(parsed.message || "Unknown error occurred.");
+                    }
+                } catch (parseErr) {
+                    console.error("🚨 Fetch failed:", error);
+                    showError("Network or server error:\n" + error.message);
+                }
+            });
     }
 
     function getDeviceId() {
@@ -217,7 +263,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     function submitEndLocation(capturedEndLocation) {
-        const { email, lastName, scannedEventID } = cachedStudent;
+        const {email, lastName, scannedEventID} = cachedStudent;
 
         const endPayload = {
             email,
@@ -228,49 +274,55 @@ document.addEventListener("DOMContentLoaded", function () {
 
         fetch('/submit_end_location', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(endPayload)
         })
-        .then(async response => {
-            if (!response.ok) throw new Error(await response.text());
-            return response.json();
-        })
-        .then(data => {
-            if (data.status === "success") {
-                alert("End location submitted successfully!");
-                showFrame(4); // maybe final frame
-            } else {
-                showError(data.message || "Submission failed.");
-            }
-        })
-        .catch(error => {
-            showError("Error submitting end location:\n" + error.message);
-        });
+            .then(async response => {
+                if (!response.ok) throw new Error(await response.text());
+                return response.json();
+            })
+            .then(data => {
+                if (data.status === "success") {
+                    alert("End location submitted successfully!");
+                    sessionStorage.setItem("frameState", "4");
+                    showFrame(4); // maybe final frame
+                    sessionStorage.setItem("frameState", 4);
+                } else {
+                    showError(data.message || "Submission failed.");
+                }
+            })
+            .catch(error => {
+                showError("Error submitting end location:\n" + error.message);
+            });
     }
 
     function showError(message) {
-    const errorBox = document.getElementById("errorMessage");
-    errorBox.innerText = message;
-    errorBox.style.display = "block";
+        const errorBox = document.getElementById("errorMessage");
+        errorBox.innerText = message;
+        errorBox.style.display = "block";
 
-    // ✅ Fix here: move timeout inside this function to access `errorBox`
-    setTimeout(() => {
-        errorBox.style.display = "none";
-    }, 6000);
-}
+        // ✅ Fix here: move timeout inside this function to access `errorBox`
+        setTimeout(() => {
+            errorBox.style.display = "none";
+        }, 6000);
+    }
 
     function createNewTableRow() {
         try {
+            const classVal = classSelectInstance?.getValue().trim();
+            const professorVal = profSelectInstance?.getValue().trim();
+
+            if (!classVal || !professorVal) return false;
+
             let newTableRow = document.createElement("tr");
-            table.appendChild(newTableRow);
             newTableRow.setAttribute("id", "tableRow");
 
             let newCourseCell = document.createElement("td");
-            newCourseCell.innerText = document.getElementById("className").value;
+            newCourseCell.innerText = classVal;
             newTableRow.appendChild(newCourseCell);
 
             let newProfessorCell = document.createElement("td");
-            newProfessorCell.innerText = document.getElementById("professorName").value;
+            newProfessorCell.innerText = professorVal;
             newTableRow.appendChild(newProfessorCell);
 
             let newDeleteCell = document.createElement("td");
@@ -282,19 +334,35 @@ document.addEventListener("DOMContentLoaded", function () {
 
             icon.addEventListener("click", function () {
                 newTableRow.remove();
-                saveFormData(); // ✅ Save after deletion
+                saveFormData();
             });
 
-            saveFormData(); // ✅ Save after addition
+            document.getElementById("tableBody").appendChild(newTableRow);
+            saveFormData();
+
+            // ✅ Clear both selects and update button
+            classSelectInstance.clear();
+            profSelectInstance.clear();
+            toggleAddRowButton();
+
             return true;
-        } catch (error) {
+        } catch (err) {
+            console.error("❌ createNewTableRow failed:", err);
             return false;
         }
     }
 
     function toggleAddRowButton() {
-        document.getElementById("addRowToTable").disabled = !(document.getElementById("className").value != "" && document.getElementById("professorName").value != "");
+        const classVal = document.getElementById("className").value.trim();
+        const profVal = document.getElementById("professorName").value.trim();
+        document.getElementById("addRowToTable").disabled = !(classVal && profVal);
     }
+
+    ["className", "professorName"].forEach(id => {
+        const el = document.getElementById(id);
+        el.addEventListener("change", toggleAddRowButton);
+        el.addEventListener("input", toggleAddRowButton); // add this line ✅
+    });
 
     function showErrorWithRestart(message) {
         const errorBox = document.getElementById("errorMessage");
@@ -303,13 +371,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
         document.getElementById("restartBtn").addEventListener("click", () => {
             sessionStorage.clear();
-            cachedStudent = { email: '', lastName: '', scannedEventID: '' };
+            cachedStudent = {email: '', lastName: '', scannedEventID: ''};
             showFrame(0);
         });
     }
 
     ["firstName", "lastName", "studentEmail"].forEach(id => {
-    const el = document.getElementById(id);
+        const el = document.getElementById(id);
         if (el) {
             el.addEventListener("input", saveFormData);
         }
@@ -319,28 +387,87 @@ document.addEventListener("DOMContentLoaded", function () {
     document.getElementById("btnSubmitFrame1").addEventListener("click", function (e) {
         e.preventDefault();
 
+        if (sendingInProgress) return;
+        sendingInProgress = true;
+
         const firstName = document.getElementById("firstName").value.trim();
         const lastName = document.getElementById("lastName").value.trim();
         const email = document.getElementById("studentEmail").value.trim();
 
         if (!firstName || !lastName || !email) {
             alert("Please fill out your first name, last name, and student email before continuing.");
+            sendingInProgress = false;
             return;
         }
+
+        const button = document.getElementById("btnSubmitFrame1");
+        button.disabled = true;
+        button.innerText = "Sending...";
 
         cachedStudent.email = email;
         cachedStudent.lastName = lastName;
         cachedStudent.scannedEventID = window.location.pathname.split('/')[2];
 
-        fetch('/verify_email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: email })
-        })
-        .then(response => response.text())
-        .catch(error => console.error('Error:', error));
+        if (emailNotice && resendBtn && timerSpan) {
+            fetch('/verify_email', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({email: email})
+            })
+                .then(response => response.text())
+                .then(() => {
+                    showFrame(1);
+                    sessionStorage.setItem("frameState", 1);
 
-        showFrame(1);
+                    function startResendCountdown(seconds) {
+                        resendBtn.disabled = true;
+                        let remaining = seconds;
+
+                        const interval = setInterval(() => {
+                            const mins = Math.floor(remaining / 60);
+                            const secs = remaining % 60;
+                            timerSpan.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+                            remaining--;
+
+                            if (remaining < 0) {
+                                clearInterval(interval);
+                                resendBtn.disabled = false;
+                                timerSpan.textContent = "Ready to resend.";
+                            }
+                        }, 1000);
+                    }
+
+                    resendBtn.addEventListener("click", () => {
+                        fetch("/resend_verification_email", {
+                            method: "POST",
+                            headers: {"Content-Type": "application/json"},
+                            body: JSON.stringify({email: document.getElementById("studentEmail").value})
+                        })
+                            .then(res => {
+                                if (res.ok) {
+                                    startResendCountdown(180);
+                                    alert("Verification email resent!");
+                                } else {
+                                    alert("Failed to resend email.");
+                                }
+                            });
+                    });
+
+                    emailNotice.style.display = "block";
+                    startResendCountdown(180);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                })
+                .finally(() => {
+                    sendingInProgress = false;
+                    button.disabled = false;
+                    button.innerText = "Verify Email";
+                });
+        } else {
+            console.error("Missing email notice elements in DOM.");
+            sendingInProgress = false;
+        }
     });
     document.getElementById("btnSubmitFrame2").addEventListener("click", function (e) {
         e.preventDefault();
@@ -354,42 +481,38 @@ document.addEventListener("DOMContentLoaded", function () {
 
         fetch('/verify_code', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code: code })
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({code: code})
         })
-        .then(response => response.json())
-        .then(data => {
-            if (data.message === 'Code verified') {
-                alert(data.message);
-                showFrame(2);
-            } else {
-                alert(data.error);
-                sessionStorage.removeItem("studentFormData");
-                sessionStorage.removeItem("currentFrame");
+            .then(response => response.json())
+            .then(data => {
+                if (data.message === 'Code verified') {
+                    alert(data.message);
+                    sessionStorage.setItem("emailVerified", "true");
+                    sessionStorage.setItem("frameState", "3"); // Frame 3 = index 2
+                    showFrame(2); // Frame 3
+                } else {
+                    alert(data.error);
+                    sessionStorage.removeItem("studentFormData");
+                    sessionStorage.removeItem("currentFrame");
 
-                document.getElementById("studentEmail").value = "";
-                document.getElementById("lastName").value = "";
-                document.getElementById("firstName").value = "";
-                document.getElementById("securityCode").value = "";
+                    document.getElementById("studentEmail").value = "";
+                    document.getElementById("lastName").value = "";
+                    document.getElementById("firstName").value = "";
+                    document.getElementById("securityCode").value = "";
 
-                cachedStudent.email = '';
-                cachedStudent.lastName = '';
-                cachedStudent.scannedEventID = '';
+                    cachedStudent.email = '';
+                    cachedStudent.lastName = '';
+                    cachedStudent.scannedEventID = '';
 
-                showFrame(0);
-            }
-        })
-        .catch(error => console.error('Error:', error));
+                    showFrame(0);
+                }
+            })
+            .catch(error => console.error('Error:', error));
     });
     document.getElementById("addRowToTable").addEventListener("click", function (event) {
-        event.preventDefault(); //prevent default form submission
-        if (createNewTableRow()) {
-            //clear input fields after adding to table
-            document.getElementById("className").value = "";
-            document.getElementById("professorName").value = "";
-            //disable add button
-            document.getElementById("addRowToTable").disabled = true;
-        }
+        event.preventDefault();
+        createNewTableRow();
     });
     document.getElementById("className").addEventListener("change", toggleAddRowButton);
     document.getElementById("professorName").addEventListener("change", toggleAddRowButton);
@@ -421,7 +544,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     console.error("📍 End location error:", error);
                     handleGeolocationError(error);
                 },
-                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+                {enableHighAccuracy: true, timeout: 15000, maximumAge: 0}
             );
         } else {
             alert("Geolocation not supported by this browser.");
@@ -430,32 +553,32 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // Load courses
     fetch('/search_courses?query=')
-      .then(res => res.json())
-      .then(data => {
-        new TomSelect("#className", {
-          placeholder: "Select or type a class name...",
-          create: true,
-          maxItems: 1,
-          valueField: "name",
-          labelField: "name",
-          searchField: "name",
-          options: data.map(name => ({ name: name.name || name })),
+        .then(res => res.json())
+        .then(data => {
+            classSelectInstance = new TomSelect("#className", {
+                placeholder: "Select or type a class name...",
+                create: true,
+                maxItems: 1,
+                valueField: "name",
+                labelField: "name",
+                searchField: "name",
+                options: data.map(name => ({name: name.name || name})),
+            });
         });
-      });
 
-    // Load professors
+// Load professors
     fetch('/search_professors?query=')
-      .then(res => res.json())
-      .then(data => {
-        new TomSelect("#professorName", {
-          placeholder: "Select or type a professor name...",
-          create: true,
-          maxItems: 1,
-          valueField: "name",
-          labelField: "name",
-          searchField: "name",
-          options: data.map(name => ({ name: name.name || name })),
+        .then(res => res.json())
+        .then(data => {
+            profSelectInstance = new TomSelect("#professorName", {
+                placeholder: "Select or type a professor name...",
+                create: true,
+                maxItems: 1,
+                valueField: "name",
+                labelField: "name",
+                searchField: "name",
+                options: data.map(name => ({name: name.name || name})),
+            });
         });
-      });
 });
 

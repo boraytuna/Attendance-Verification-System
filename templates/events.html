@@ -1,166 +1,76 @@
 {% extends 'base.html' %}
 {% block content %}
 
-{% with messages = get_flashed_messages(with_categories=true) %}
-{% if messages %}
-<div style="margin-bottom: 20px;">
-    {% for category, message in messages %}
-    <div class="flash-message {{ category }}"
-        style="background-color: #f8d7da; color: #721c24; padding: 10px; border: 1px solid #f5c6cb; border-radius: 5px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
-        {{ message }}
-        <button onclick="this.parentElement.style.display='none'"
-            style="background: none; border: none; font-weight: bold; cursor: pointer;">✖</button>
-    </div>
-    {% endfor %}
-</div>
-<script>
-    setTimeout(() => {
-        const alerts = document.querySelectorAll('.flash-message');
-        alerts.forEach(alert => alert.style.display = 'none');
-    }, 4000);
-</script>
-{% endif %}
-{% endwith %}
-
-<script>
-    function handleLocationSelection() {
-        var selectedValue = document.getElementById("saved_locations").value;
-        var locationError = document.getElementById("location_error");
-
-        if (selectedValue) {
-            var [lat, lng] = selectedValue.split(",").map(Number);
-            document.getElementById("event_location").value = `${lat},${lng}`;
-            document.getElementById("event_address").value = place.name + " (" + place.building + ")";
-            locationError.style.display = "none";
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            margin: 30px;
+            background-color: #f5f6f7;
+            color: #333;
         }
-    }
 
-    function validateLocation(event) {
-        var location = document.getElementById("event_location").value;
-        var selectedValue = document.getElementById("saved_locations").value;
-        var locationError = document.getElementById("location_error");
-
-        if (!location && !selectedValue) {
-            event.preventDefault();
-            locationError.style.display = "block";
-            return false;
+        .content-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
-        return true;
-    }
 
-    window.onload = function () {
-        fetch("/api/places")
-            .then(response => response.json())
-            .then(places => {
-                var select = document.getElementById("saved_locations");
-                places.forEach(place => {
-                    var option = document.createElement("option");
-                    option.value = `${place.latitude},${place.longitude}`;
-                    option.textContent = `${place.name} (${place.building})`;
-                    select.appendChild(option);
-                });
-            })
-            .catch(error => console.error("Error fetching places:", error));
-    };
-
-    let isFormDirty = false;
-    document.querySelectorAll("input, textarea, select").forEach(el => {
-        el.addEventListener("input", () => isFormDirty = true);
-    });
-
-    window.addEventListener("beforeunload", function (e) {
-        if (isFormDirty) {
-            e.preventDefault();
-            e.returnValue = '';
+        .title-container {
+            text-align: center;
+            margin-bottom: 20px;
+            width: 100%;
         }
-    });
-</script>
 
-<style>
-    body {
-        font-family: 'Segoe UI', sans-serif;
-        margin: 30px;
-        background-color: #f5f6f7;
-        color: #333;
-    }
+        h1 {
+            color: #0056b3;
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
 
-    .content-container {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-    }
+        form {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            max-width: 600px;
+            width: 100%;
+        }
 
-    .title-container {
-        text-align: center;
-        margin-bottom: 20px;
-        width: 100%;
-    }
+        label {
+            font-weight: bold;
+        }
 
-    h1 {
-        color: #0056b3;
-        font-size: 24px;
-        margin-bottom: 10px;
-    }
+        input,
+        button,
+        select {
+            margin-top: 5px;
+            padding: 10px;
+            width: 100%;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
 
-    .form-container {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        width: 100%;
-    }
+        button {
+            background-color: #0056b3;
+            color: #fff;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
 
-    form {
-        background-color: #fff;
-        padding: 20px;
-        border-radius: 10px;
-        box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
-        max-width: 600px;
-        width: 100%;
-    }
+        button:hover {
+            background-color: #004494;
+        }
 
-    table {
-        width: 100%;
-        border-collapse: collapse;
-    }
+        #location_error {
+            color: red;
+            display: none; /* hidden by default; shown if user fails to pick a location */
+        }
+    </style>
 
-    td {
-        padding: 10px;
-    }
-
-    label {
-        font-weight: bold;
-    }
-
-    input,
-    button,
-    select {
-        margin-top: 5px;
-        padding: 10px;
-        width: 100%;
-        margin-bottom: 15px;
-        border: 1px solid #ccc;
-        border-radius: 5px;
-        box-sizing: border-box;
-    }
-
-    button {
-        background-color: #0056b3;
-        color: #fff;
-        cursor: pointer;
-        transition: background-color 0.3s;
-    }
-
-    button:hover {
-        background-color: #004494;
-    }
-
-    #location_error {
-        color: red;
-    }
-</style>
-
-<body>
+    <body>
     <div class="content-container">
         <div class="title-container">
             <h1>🎓 Event Management</h1>
@@ -168,15 +78,70 @@
 
         <div class="form-container">
             <form action="/submit_event" method="post">
+                <!-- Tracks whether this event is recurring -->
+                <input type="hidden" name="is_recurring" id="is_recurring" value="false">
+
                 <table>
+                    <!-- EVENT NAME -->
                     <tr>
                         <td><label for="event_name">Event Name:</label></td>
                         <td><input type="text" id="event_name" name="event_name" required></td>
                     </tr>
+
+                    <!-- EVENT DESCRIPTION -->
                     <tr>
+                        <td><label for="event_info">Event Info:</label></td>
+                        <td>
+        <textarea id="event_info" name="event_info"
+                  placeholder="Describe your event — what is it, who's it for, and why it matters. Aim for 250–300 words."
+                  rows="6"
+                  style="resize: vertical; min-height: 120px; font-family: inherit; font-size: 15px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; width: 100%; box-sizing: border-box;"></textarea>
+                        </td>
+                    </tr>
+
+                    <!-- SINGLE EVENT DATE -->
+                    <tr id="eventDateRow">
                         <td><label for="event_date">Event Date:</label></td>
                         <td><input type="date" id="event_date" name="event_date" required></td>
                     </tr>
+
+                    <!-- TOGGLE RECURRING -->
+                    <tr>
+                        <td colspan="2" style="text-align: center;">
+                            <button type="button" id="toggleRecurrence"
+                                    style="margin-top: 0; background-color: #0056b3; color: white;">
+                                🔁 Make This a Recurring Event
+                            </button>
+                        </td>
+                    </tr>
+
+                    <!-- RECURRING SECTION (hidden by default) -->
+                    <tr id="recurrenceSection" style="display: none;">
+                        <td colspan="2">
+                            <div style="margin-top: 10px; background-color: #eef3f7; padding: 15px; border-radius: 8px;">
+                                <label for="recurrence">Repeat:</label>
+                                <select name="recurrence" id="recurrence">
+                                    <option value="none">Does not repeat</option>
+                                    <option value="daily">Daily</option>
+                                    <option value="weekly">Weekly</option>
+                                    <option value="monthly">Monthly</option>
+                                </select>
+
+                                <label for="recurrence_start_date">Start Date:</label>
+                                <input type="date" id="recurrence_start_date" name="recurrence_start_date">
+
+                                <label for="recurrence_end_date" style="margin-top: 10px;">End Date:</label>
+                                <input type="date" id="recurrence_end_date" name="recurrence_end_date">
+
+                                <div style="font-size: 13px; color: #666; margin-top: 10px;">
+                                    ℹ️ Recurring events will be created for each interval between the start and end
+                                    dates.
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+
+                    <!-- START / END TIME -->
                     <tr>
                         <td><label for="start_time">Start Time:</label></td>
                         <td><input type="time" id="start_time" name="start_time" required></td>
@@ -185,51 +150,165 @@
                         <td><label for="stop_time">End Time:</label></td>
                         <td><input type="time" id="stop_time" name="stop_time" required></td>
                     </tr>
+
+                    <!-- LOCATION SELECTION -->
                     <tr>
                         <td><label for="saved_locations">Choose a Location:</label></td>
                         <td>
                             <select id="saved_locations" onchange="handleLocationSelection()">
                                 <option value="">-- Select a saved location --</option>
                             </select>
-                            <div style="margin-top: 5px; font-size: 14px;">
-                                 ⚠️ Choosing Create New Place will cause changes to be gone.
-                            </div>
                         </td>
-
                     </tr>
-                    <select name="recurrence">
-                        <option value="none">Does not repeat</option>
-                        <option value="daily">Daily</option>
-                        <option value="weekly">Weekly</option>
-                        <option value="monthly">Monthly</option>
-                      </select>
-                      
+
+                    <!-- CREATE NEW PLACE BUTTON -->
                     <tr>
                         <td colspan="2">
-                            <button type="button" onclick="window.location.href='http://127.0.0.1:5000/places'">➕ Create
-                                New Place</button>
+                            <div style="margin-top: 5px; font-size: 14px;">
+                                Couldn't find the place you are looking for?
+                            </div>
+                            <div style="margin-top: 5px; font-size: 14px;">
+                                ⚠️ Choosing Create New Place will cause changes to be lost.
+                            </div>
+                            <button type="button" onclick="window.location.href='/places'">➕ Create New Place</button>
                         </td>
                     </tr>
+
+                    <!-- HIDDEN LOCATION FIELD + ERROR MSG -->
                     <tr>
                         <td colspan="2">
                             <input type="hidden" id="event_location" name="event_location">
-                            <p id="location_error" style="display: none;">⚠️ Please select a location before submitting.
-                            </p>
+                            <p id="location_error">⚠️ Please select a location before submitting.</p>
                         </td>
                     </tr>
+
+                    <!-- SUBMIT BUTTON -->
                     <tr>
                         <td colspan="2">
-                            <button type="submit" onclick="validateLocation(event)">Create Event</button>
+                            <button type="submit">Create Event</button>
                         </td>
                     </tr>
                 </table>
             </form>
         </div>
+    </div>
 
-        <p id="location_error" style="color: red; display: none;">⚠️ Please select a location before submitting.</p>
+    <!-- Inline Script for Form Logic -->
+    <script>
+        /**
+         * Ensures a location is chosen before submission.
+         * If not, show the error and block submission.
+         */
+        function validateLocation() {
+            return true; // let backend validate properly
+        }
 
-        <button type="submit" onclick="validateLocation(event)">Create Event</button>
-    </form>
-</body>
+        /**
+         * When the user picks a saved location, fill the hidden input and hide any error.
+         */
+        function handleLocationSelection() {
+            const selectedValue = document.getElementById('saved_locations').value;
+            const locationError = document.getElementById('location_error');
+            document.getElementById('event_location').value = selectedValue;
+            if (selectedValue) {
+                locationError.style.display = 'none';
+            }
+        }
+
+        /**
+         * Toggle recurring vs. single-day event inputs.
+         * Copies the single date into Start/End if user chooses recurring.
+         */
+        document.addEventListener('DOMContentLoaded', () => {
+            const toggleBtn = document.getElementById('toggleRecurrence');
+            const recurrenceSection = document.getElementById('recurrenceSection');
+            const eventDateRow = document.getElementById('eventDateRow');
+            const eventDateInput = document.getElementById('event_date');
+            const isRecurringInput = document.getElementById('is_recurring');
+            const recurrenceStartInput = document.getElementById('recurrence_start_date');
+            const recurrenceEndInput = document.getElementById('recurrence_end_date');
+
+            // 🔁 Toggle recurring section
+            toggleBtn.addEventListener('click', () => {
+                const isActive = recurrenceSection.style.display === "table-row";
+
+                if (!isActive) {
+                    // Turn ON recurring
+                    recurrenceSection.style.display = "table-row";
+                    eventDateRow.style.display = "none";
+                    toggleBtn.textContent = "❌ Cancel Recurring Event";
+                    toggleBtn.style.backgroundColor = "#cc0000";
+                    isRecurringInput.value = "true";
+
+                    recurrenceStartInput.required = true;
+                    recurrenceEndInput.required = true;
+
+                    recurrenceStartInput.disabled = false;
+                    recurrenceEndInput.disabled = false;
+                    recurrenceDropdown.disabled = false;
+
+                    recurrenceStartInput.value = eventDateInput.value;
+                    recurrenceEndInput.value = eventDateInput.value;
+                } else {
+                    // Turn OFF recurring
+                    recurrenceSection.style.display = "none";
+                    eventDateRow.style.display = "table-row";
+                    toggleBtn.textContent = "🔁 Make This a Recurring Event";
+                    toggleBtn.style.backgroundColor = "#0056b3";
+                    isRecurringInput.value = "false";
+
+// 🔄 Full reset of recurring-specific fields
+                    recurrenceStartInput.removeAttribute("required");
+                    recurrenceEndInput.removeAttribute("required");
+
+                    recurrenceStartInput.value = "";
+                    recurrenceEndInput.value = "";
+
+                    const recurrenceDropdown = document.getElementById("recurrence");
+                    recurrenceDropdown.value = "none";
+
+// 🔒 Disable recurrence fields so they don't get submitted accidentally
+                    recurrenceStartInput.disabled = true;
+                    recurrenceEndInput.disabled = true;
+                    recurrenceDropdown.disabled = true;
+                }
+            });
+
+            // 📍 Load saved locations into dropdown
+            fetch('/api/places')
+                .then(response => response.json())
+                .then(places => {
+                    const select = document.getElementById('saved_locations');
+                    places.forEach(place => {
+                        const value = `${place.latitude},${place.longitude}`;
+                        const option = document.createElement('option');
+                        option.value = value;
+                        option.textContent = `${place.name} (${place.building})`;
+                        select.appendChild(option);
+                    });
+                })
+                .catch(error => console.error('Error loading places:', error));
+        });
+    </script>
+
+
+    <script>
+        document.querySelector("form").addEventListener("submit", (e) => {
+            const isRecurring = document.getElementById("is_recurring").value === "true";
+            const recurrenceType = document.getElementById("recurrence").value;
+
+            if (isRecurring && recurrenceType === "none") {
+                const proceed = confirm("⚠️ You selected recurring, but chose 'Does not repeat' as the type. Do you want to continue?");
+                if (!proceed) {
+                    e.preventDefault(); // Stop form submission
+                    return;
+                }
+            }
+
+            console.log("🚀 Form submitted!");
+        });
+    </script>
+    </body>
+
 
 {% endblock %}

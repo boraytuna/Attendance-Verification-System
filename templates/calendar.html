@@ -1,14 +1,29 @@
 {% extends 'base.html' %}
 {% block content %}
 
-<style>
-    body {
-        font-family: 'Segoe UI', sans-serif;
-        margin: 30px;
-        background-color: #f5f6f7;
-        color: #333;
-    }
-</style>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            margin: 30px;
+            background-color: #f5f6f7;
+            color: #333;
+        }
+
+        .qr-button-link {
+            background-color: #28a745;
+            color: white;
+            text-decoration: none;
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 14px;
+            display: inline-block;
+            transition: background-color 0.2s;
+        }
+
+        .qr-button-link:hover {
+            background-color: #218838;
+        }
+    </style>
     <h1>Calendar</h1>
 
     <div class="calendar-container">
@@ -21,15 +36,13 @@
     </div>
 
     <!-- ✅ Modal for Event Details -->
-  <div id="eventModal" class="modal" style="display: none;">
-    <div class="modal-content">
-      <span class="close-button">&times;</span>
-      <h2 id="modalTitle"></h2>
-      <p><strong>Date:</strong> <span id="modalDate"></span></p>
-      <p><strong>Time:</strong> <span id="modalTime"></span></p>
-      <p><strong>Location:</strong> <span id="modalLocation"></span></p>
+    <div id="eventModal" class="modal" style="display: none;">
+        <div class="modal-content" style="text-align: center;">
+            <span class="close-button" style="float: right; font-size: 20px; cursor: pointer;">&times;</span>
+            <h2 id="modalTitle" style="margin-top: 10px; font-size: 24px;"></h2>
+            <div id="modalInfo" style="margin-top: 20px; font-size: 16px;"></div>
+        </div>
     </div>
-  </div>
 
 
     <link rel="stylesheet" href="{{ url_for('static', filename='css/calendar.css') }}">
@@ -45,73 +58,119 @@
             let currentDate = new Date();
 
             function generateCalendar(date) {
-    const year = date.getFullYear();
-    const month = date.getMonth();
+                const year = date.getFullYear();
+                const month = date.getMonth();
+                const today = new Date();
 
-    monthYearEl.textContent = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(date);
-    calendarEl.innerHTML = ""; // Clear existing content
+                monthYearEl.textContent = new Intl.DateTimeFormat('en-US', {
+                    month: 'long',
+                    year: 'numeric'
+                }).format(date);
+                calendarEl.innerHTML = ""; // Clear existing content
 
-    const firstDay = new Date(year, month, 1).getDay();
-    const lastDate = new Date(year, month + 1, 0).getDate();
+                const firstDay = new Date(year, month, 1).getDay();
+                const lastDate = new Date(year, month + 1, 0).getDate();
 
-    calendarEl.classList.add("calendar-grid");
+                calendarEl.classList.add("calendar-grid");
 
-    for (let i = 0; i < firstDay; i++) {
-        const emptyCell = document.createElement("div");
-        emptyCell.classList.add("calendar-cell", "empty");
-        calendarEl.appendChild(emptyCell);
-    }
-
-    for (let day = 1; day <= lastDate; day++) {
-        const cell = document.createElement("div");
-        cell.classList.add("calendar-cell");
-        cell.dataset.date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-        cell.innerHTML = `<strong>${day}</strong><div class="event-list"></div>`;
-        calendarEl.appendChild(cell);
-    }
-
-    loadEvents();
-}
-
-
-function loadEvents() {
-    fetch("/api/events")
-        .then(response => response.json())
-        .then(events => {
-            events.forEach(event => {
-                const cell = document.querySelector(`[data-date='${event.eventDate}']`);
-                if (cell) {
-                    const eventDiv = document.createElement("div");
-                    eventDiv.classList.add("event-item");
-                    eventDiv.textContent = event.eventName;
-                    eventDiv.addEventListener("click", function(e) {
-                        e.stopPropagation(); // Prevent click from bubbling
-                        showModal(event);
-                    });
-                    cell.querySelector(".event-list").appendChild(eventDiv);
+                for (let i = 0; i < firstDay; i++) {
+                    const emptyCell = document.createElement("div");
+                    emptyCell.classList.add("calendar-cell", "empty");
+                    calendarEl.appendChild(emptyCell);
                 }
-            });
-        });
-}
+
+                for (let day = 1; day <= lastDate; day++) {
+                    const cell = document.createElement("div");
+                    cell.classList.add("calendar-cell");
+                    cell.dataset.date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                    cell.innerHTML = `<strong>${day}</strong><div class="event-list"></div>`;
+
+                    // ✅ Highlight today's cell
+                    if (
+                        year === today.getFullYear() &&
+                        month === today.getMonth() &&
+                        day === today.getDate()
+                    ) {
+                        cell.classList.add("today-highlight");
+                    }
+
+                    calendarEl.appendChild(cell);
+                }
+
+                loadEvents();
+            }
+
+
+            function loadEvents() {
+                fetch("/api/event/information")
+                    .then(response => response.json())
+                    .then(events => {
+                        events.forEach(event => {
+                            const cell = document.querySelector(`[data-date='${event.eventDate}']`);
+                            if (cell) {
+                                const eventDiv = document.createElement("div");
+                                eventDiv.classList.add("event-item");
+                                eventDiv.textContent = event.eventName;
+                                eventDiv.addEventListener("click", function (e) {
+                                    e.stopPropagation(); // Prevent click from bubbling
+                                    showModal(event);
+                                });
+                                cell.querySelector(".event-list").appendChild(eventDiv);
+                            }
+                        });
+                    });
+            }
 
 // Modal logic
-const modal = document.getElementById("eventModal");
-const closeButton = document.querySelector(".close-button");
+            const modal = document.getElementById("eventModal");
+            const closeButton = document.querySelector(".close-button");
 
-function showModal(event) {
-    document.getElementById("modalTitle").textContent = event.eventName;
-    document.getElementById("modalDate").textContent = event.eventDate;
-    document.getElementById("modalTime").textContent = `${event.startTime} - ${event.stopTime}`;
-    document.getElementById("modalLocation").textContent = event.eventAddress || `${event.latitude}, ${event.longitude}`;
-    modal.style.display = "block";
-}
+            function showModal(event) {
+                const title = event.eventName;
+                const date = event.eventDate;
+                const time = `${event.startTime} - ${event.stopTime}`;
 
-closeButton.onclick = () => { modal.style.display = "none"; }
-window.onclick = function(event) {
-    if (event.target === modal) {
-        modal.style.display = "none";
-    }
-};
+                const location = event.place_name && event.building
+                    ? `${event.place_name} (${event.building})`
+                    : event.building || event.eventAddress || `${event.latitude}, ${event.longitude}`;
+
+                const recurrence = event.recurrenceType
+                    ? `<strong>Recurring:</strong> <span style="font-style: italic;">${event.recurrenceType}</span>`
+                    : `<span style="font-style: italic;">One-time event</span>`;
+
+                document.getElementById("modalTitle").textContent = title;
+
+                document.getElementById("modalInfo").innerHTML = `
+    <div style="margin-top: 8px;"><strong>Date:</strong> ${date}</div>
+    <div style="margin-top: 8px;"><strong>Time:</strong> ${time}</div>
+    <div style="margin-top: 8px;"><strong>Location:</strong> ${location}</div>
+    <div style="margin-top: 8px;">${recurrence}</div>
+
+    ${event.eventDescription ? `
+        <div style="margin-top: 15px; padding: 12px; background-color: #f9f9f9; border-radius: 6px; font-size: 15px; color: #444; text-align: left;">
+            <strong>Event Info:</strong><br>
+            <div style="margin-top: 5px;">${event.eventDescription}</div>
+        </div>
+    ` : `
+        <div style="margin-top: 15px; font-style: italic; color: #999;">No event description provided.</div>
+    `}
+
+    <div style="margin-top: 20px;">
+        <a class="qr-button-link" href="/qr_code/${event.eventID}" target="_blank">📲 Show QR</a>
+    </div>
+`;
+
+                modal.style.display = "block";
+            }
+
+            closeButton.onclick = () => {
+                modal.style.display = "none";
+            }
+            window.onclick = function (event) {
+                if (event.target === modal) {
+                    modal.style.display = "none";
+                }
+            };
 
             prevMonthBtn.addEventListener("click", function () {
                 currentDate.setMonth(currentDate.getMonth() - 1);

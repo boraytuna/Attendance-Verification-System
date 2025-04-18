@@ -1,208 +1,288 @@
 {% extends 'base.html' %}
 {% block content %}
 
-<style>
-    body {
-        font-family: 'Segoe UI', sans-serif;
-        margin: 30px;
-        background-color: #f5f6f7;
-        color: #333;
-    }
+    <style>
 
-    h1,
-    h2 {
-        text-align: center;
-        color: #0056b3;
-        margin-bottom: 20px;
-    }
+        th:nth-child(1), td:nth-child(1) {
+            width: 20%;
+        }
 
-    .dashboard-container {
-        max-width: 1000px;
-        margin: auto;
-        background-color: #ffffff;
-        padding: 30px;
-        border-radius: 10px;
-        box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
-    }
+        th:nth-child(2), td:nth-child(2) {
+            width: 20%;
+        }
 
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 20px;
-        background-color: #fff;
-        box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
-        border-radius: 8px;
-        overflow: hidden;
-    }
+        th:nth-child(3), td:nth-child(3) {
+            width: 20%;
+        }
 
-    th,
-    td {
-        padding: 14px 18px;
-        border-bottom: 1px solid #ddd;
-        text-align: center;
-    }
+        th:nth-child(4), td:nth-child(4) {
+            width: 20%;
+        }
 
-    th {
-        background-color: #0056b3;
-        color: white;
-    }
+        th:nth-child(5), td:nth-child(5) {
+            width: 20%;
+        }
 
-    tr:nth-child(even) {
-        background-color: #f2f2f2;
-    }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            margin: 30px;
+            background-color: #f5f6f7;
+            color: #333;
+        }
 
-    .qr-buttons button,
-    .qr-button-link {
-        background-color: #28a745;
-        color: white;
-        text-decoration: none;
-        padding: 8px 12px;
-        border-radius: 5px;
-        font-size: 14px;
-        display: inline-block;
-        transition: background-color 0.2s;
-        border: none;
-        cursor: pointer;
-    }
+        h1,
+        h2 {
+            text-align: center;
+            color: #0056b3;
+            margin-bottom: 20px;
+        }
 
-    .qr-buttons button:hover,
-    .qr-button-link:hover {
-        background-color: #218838;
-    }
+        .dashboard-container {
+            max-width: 1000px;
+            margin: auto;
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+        }
 
-    .no-events {
-        text-align: center;
-        margin-top: 40px;
-        font-style: italic;
-        color: #777;
-    }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+            border-radius: 8px;
+            overflow: hidden;
+        }
 
-    .more-info-btn {
-        background-color: #007bff;
-        color: white;
-        padding: 8px 12px;
-        border-radius: 5px;
-        font-size: 14px;
-        cursor: pointer;
-        text-decoration: none;
-        display: inline-block;
-        transition: background-color 0.2s;
-    }
+        th,
+        td {
+            padding: 14px 18px;
+            border-bottom: 1px solid #ddd;
+            text-align: center;
+        }
 
-    .more-info-btn:hover {
-        background-color: #0056b3;
-    }
-</style>
+        th {
+            background-color: #0056b3;
+            color: white;
+        }
 
-<div class="dashboard-container" style="padding: 30px;">
-    <h1 style="text-align: center;">📋 Event Dashboard</h1>
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
 
-    <p>Welcome, {{ session['first_name'] }} {{ session['last_name'] }}!</p>
+        .qr-buttons button,
+        .qr-button-link {
+            background-color: #28a745;
+            color: white;
+            text-decoration: none;
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 14px;
+            display: inline-block;
+            transition: background-color 0.2s;
+            border: none;
+            cursor: pointer;
+        }
 
-    {% if request.args.get('success') == '1' %}
-    <div class="flash-message"
-        style="background-color: #d4edda; color: #155724; padding: 12px; border: 1px solid #c3e6cb; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
-        ✅ Event created successfully!
-        <button onclick="this.parentElement.style.display='none'"
-            style="background: none; border: none; font-weight: bold; cursor: pointer; color: #155724;">✖</button>
+        .qr-buttons button:hover,
+        .qr-button-link:hover {
+            background-color: #218838;
+        }
+
+        .no-events {
+            text-align: center;
+            margin-top: 40px;
+            font-style: italic;
+            color: #777;
+        }
+
+        .more-info-btn {
+            background-color: #007bff;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: background-color 0.2s;
+        }
+
+        .more-info-btn:hover {
+            background-color: #0056b3;
+        }
+    </style>
+
+    {% macro render_table(events, section_name, page_var, total, per_page, current_page) %}
+        <h2>{{ section_name }}</h2>
+        {% if events %}
+            <table class="table">
+                <thead>
+                <tr>
+                    <th>Event</th>
+                    <th>Time</th>
+                    <th>Location</th>
+                    <th>QR Code</th>
+                    <th>More Information</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for event in events %}
+                    <tr>
+                        <td>{{ event['eventName'] }}</td>
+                        <td>{{ event['eventDate'] if section_name != '🟡 Events Happening Now' else '' }} {{ event['startTime'] }}
+                            - {{ event['stopTime'] }}</td>
+                        <td>{{ event['place_name'] ~ ' (' ~ event['building'] ~ ')' if event['place_name'] else event['eventAddress'] }}</td>
+                        <td><a class="qr-button-link" href="/qr_code/{{ event['eventID'] }}" target="_blank">Show QR</a>
+                        </td>
+                        <td><a class="more-info-btn" href="/event_info/{{ event['eventID'] }}">More Information</a></td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            <div class="pagination" data-section="{{ page_var }}" style="margin-top: 10px; text-align: center;">
+                {% set total_pages = (total // per_page) + (1 if total % per_page > 0 else 0) %}
+                {% for page in range(1, total_pages + 1) %}
+                    {% if page == current_page %}
+                        <span style="margin: 0 5px; font-weight: bold;">{{ page }}</span>
+                    {% else %}
+                        <a href="#" data-page="{{ page }}" style="margin: 0 5px;">{{ page }}</a>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        {% else %}
+            <p>No events for this category.</p>
+        {% endif %}
+    {% endmacro %}
+
+    <div class="dashboard-container" style="padding: 30px;">
+        <h1 style="text-align: center;">📋 Event Dashboard</h1>
+        <p>Welcome, {{ session['first_name'] }} {{ session['last_name'] }}!</p>
+        {% if request.args.get('created') == '1' %}
+            <div class="flash-message"
+                 style="background-color: #d4edda; color: #155724; padding: 12px; border: 1px solid #c3e6cb; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+                ✅ Event created successfully!
+                <button onclick="this.parentElement.style.display='none'"
+                        style="background: none; border: none; font-weight: bold; cursor: pointer; color: #155724;">✖
+                </button>
+            </div>
+        {% elif request.args.get('edited') == '1' %}
+            <div class="flash-message"
+                 style="background-color: #d4edda; color: #155724; padding: 12px; border: 1px solid #c3e6cb; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+                ✅ Event updated successfully!
+                <button onclick="this.parentElement.style.display='none'"
+                        style="background: none; border: none; font-weight: bold; cursor: pointer; color: #155724;">✖
+                </button>
+            </div>
+        {% elif request.args.get('deleted') == '1' %}
+            <div class="flash-message"
+                 style="background-color: #d4edda; color: #155724; padding: 12px; border: 1px solid #c3e6cb; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+                ✅ Event deleted successfully!
+                <button onclick="this.parentElement.style.display='none'"
+                        style="background: none; border: none; font-weight: bold; cursor: pointer; color: #155724;">✖
+                </button>
+            </div>
+        {% elif request.args.get('place_created') == '1' %}
+            <div class="flash-message"
+                 style="background-color: #d4edda; color: #155724; padding: 12px; border: 1px solid #c3e6cb; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+                ✅ New place created successfully!
+                <button onclick="this.parentElement.style.display='none'"
+                        style="background: none; border: none; font-weight: bold; cursor: pointer; color: #155724;">✖
+                </button>
+            </div>
+        {% endif %}
+        <div id="current-events-section">
+            {{ render_table(current_events, '🟡 Events Happening Now', 'current_page', current_total, per_page, current_page) }}
+        </div>
+        <div id="upcoming-events-section">
+            {{ render_table(upcoming_events, '📅 Upcoming Events', 'upcoming_page', upcoming_total, per_page, upcoming_page) }}
+        </div>
+        <div id="past-events-section">
+            {{ render_table(past_events, '🕘 Past Events', 'past_page', past_total, per_page, past_page) }}
+        </div>
     </div>
+
     <script>
-        setTimeout(() => {
-            const alerts = document.querySelectorAll('.flash-message');
-            alerts.forEach(alert => alert.style.display = 'none');
-        }, 4000);
+        document.addEventListener("DOMContentLoaded", function () {
+            let currentPage = {{ current_page }};
+            let upcomingPage = {{ upcoming_page }};
+            let pastPage = {{ past_page }};
+
+            function loadDashboardData() {
+                fetch(`/api/dashboard_data?current_page=${currentPage}&upcoming_page=${upcomingPage}&past_page=${pastPage}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        renderSection("current", data.current_events, data.current_total, currentPage, "🟡 Events Happening Now", "current_page");
+                        renderSection("upcoming", data.upcoming_events, data.upcoming_total, upcomingPage, "📅 Upcoming Events", "upcoming_page");
+                        renderSection("past", data.past_events, data.past_total, pastPage, "🕘 Past Events", "past_page");
+                    });
+            }
+
+            function renderSection(id, events, total, page, title, pageVar) {
+                const container = document.getElementById(`${id}-events-section`);
+                if (!events.length) {
+                    container.innerHTML = `<h2>${title}</h2><p>No events for this category.</p>`;
+                    return;
+                }
+
+                let html = `<h2>${title}</h2>
+                        <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Event</th>
+                                <th>Time</th>
+                                <th>Location</th>
+                                <th>QR Code</th>
+                                <th>More Information</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+
+                events.forEach(event => {
+                    const date = (title !== "🟡 Events Happening Now") ? `${event.eventDate} ` : "";
+                    const location = event.place_name ? `${event.place_name} (${event.building})` : event.eventAddress || "N/A";
+                    html += `<tr>
+                            <td>${event.eventName}</td>
+                            <td>${date}${event.startTime} - ${event.stopTime}</td>
+                            <td>${location}</td>
+                            <td><a class="qr-button-link" href="/qr_code/${event.eventID}" target="_blank">Show QR</a></td>
+                            <td><a class="more-info-btn" href="/event_info/${event.eventID}">More Information</a></td>
+                         </tr>`;
+                });
+
+                html += `</tbody></table><div class="pagination" data-section="${pageVar}" style="text-align:center;">`;
+
+                const totalPages = Math.ceil(total / {{ per_page }});
+                for (let i = 1; i <= totalPages; i++) {
+                    if (i === page) {
+                        html += `<span style="margin: 0 5px; font-weight: bold;">${i}</span>`;
+                    } else {
+                        html += `<a href="#" class="pagination-link" data-page="${i}" data-section="${pageVar}" style="margin: 0 5px;">${i}</a>`;
+                    }
+                }
+
+                html += `</div>`;
+                container.innerHTML = html;
+            }
+
+            document.addEventListener("click", function (e) {
+                if (e.target.classList.contains("pagination-link")) {
+                    e.preventDefault();
+                    const page = parseInt(e.target.dataset.page);
+                    const section = e.target.dataset.section;
+
+                    if (section === 'current_page') currentPage = page;
+                    if (section === 'upcoming_page') upcomingPage = page;
+                    if (section === 'past_page') pastPage = page;
+
+                    loadDashboardData();
+                }
+            });
+
+            // Initial load
+            loadDashboardData();
+        });
     </script>
-    {% endif %}
-
-    <!-- Current Events Section -->
-    <h2>🟡 Events Happening Now</h2>
-    {% if current_events %}
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Event</th>
-                <th>Time</th>
-                <th>Location</th>
-                <th>QR Code</th>
-                <th>More Information</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for event in current_events %}
-            <tr>
-                <td>{{ event['eventName'] }}</td>
-                <td>{{ event['startTime'] }} - {{ event['stopTime'] }}</td>
-                <td>{{ event['place_name'] ~ ' (' ~ event['building'] ~ ')' if event['place_name'] else
-                    event['eventAddress'] }}</td>
-                <td><a class="qr-button-link" href="/qr_code/{{ event['eventID'] }}" target="_blank">Show QR</a></td>
-                <td><a class="more-info-btn" href="/event_info/{{ event['eventID'] }}">More Information</a></td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p>No events currently in progress.</p>
-    {% endif %}
-
-    <!-- Upcoming Events Section -->
-    <h2>📅 Upcoming Events</h2>
-    {% if upcoming_events %}
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Event</th>
-                <th>Start Time</th>
-                <th>Location</th>
-                <th>QR Code</th>
-                <th>More Information</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for event in upcoming_events %}
-            <tr>
-                <td>{{ event['eventName'] }}</td>
-                <td>{{ event['eventDate'] }} @ {{ event['startTime'] }}</td>
-                <td>{{ event['place_name'] ~ ' (' ~ event['building'] ~ ')' if event['place_name'] else
-                    event['eventAddress'] }}</td>
-                <td><a class="qr-button-link" href="/qr_code/{{ event['eventID'] }}" target="_blank">Show QR</a></td>
-                <td><a class="more-info-btn" href="/event_info/{{ event['eventID'] }}">More Information</a></td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p>No upcoming events scheduled.</p>
-    {% endif %}
-
-    <!-- Past Events Section -->
-    <h2>🕘 Past Events</h2>
-    {% if past_events %}
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Event</th>
-                <th>Time</th>
-                <th>Location</th>
-                <th>QR Code</th>
-                <th>More Information</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for event in past_events %}
-            <tr>
-                <td>{{ event['eventName'] }}</td>
-                <td>{{ event['eventDate'] }} @ {{ event['startTime'] }}</td>
-                <td>{{ event['place_name'] ~ ' (' ~ event['building'] ~ ')' if event['place_name'] else
-                    event['eventAddress'] }}</td>
-                <td><a class="qr-button-link" href="/qr_code/{{ event['eventID'] }}" target="_blank">Show QR</a></td>
-                <td><a class="more-info-btn" href="/event_info/{{ event['eventID'] }}">More Information</a></td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p>No past events.</p>
-    {% endif %}
-</div>
-
 {% endblock %}

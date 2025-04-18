@@ -58,8 +58,19 @@
         <h1>Student Attendance Form</h1>
         <form>
             <label for="securityCode">Enter security code</label>
-            <input type="text" id="securityCode" name="securityCode" placeholder="Security Code" minlength="6" maxlength="6" required>
+            <input type="text" id="securityCode" name="securityCode" placeholder="Security Code" minlength="6"
+                   maxlength="6" required>
         </form>
+        <div id="emailSentNotice"
+             style="margin-top: 1rem; padding: 10px; border: 1px solid #ccc; background-color: #f0f0f0; display: none;">
+            <p>
+                📧 Verification email sent!<br>
+                If you didn’t receive it, you can request a new one in
+                <strong><span id="resendTimer">3:00</span></strong>.
+            </p>
+            </p>
+            <button id="resendEmailBtn" disabled>Resend Email</button>
+        </div>
         <button id="btnSubmitFrame2">Verify Code</button>
     </div>
 </section>
@@ -87,11 +98,11 @@
                     <col style="width: 5%;">
                 </colgroup>
                 <tbody id="tableBody">
-                    <tr id="tableHeader">
-                        <th>Course Name</th>
-                        <th>Professor Name</th>
-                        <th></th>
-                    </tr>
+                <tr id="tableHeader">
+                    <th>Course Name</th>
+                    <th>Professor Name</th>
+                    <th></th>
+                </tr>
                 </tbody>
             </table>
 
@@ -100,7 +111,8 @@
                 <input type="checkbox" id="userAgreement" required>
                 <label for="userAgreement">
                     I agree to the
-                    <a href="/user-agreement.html" target="_blank" style="text-decoration: underline;">User Agreement</a>
+                    <a href="/user-agreement.html" target="_blank" style="text-decoration: underline;">User
+                        Agreement</a>
                 </label>
             </div>
 
@@ -108,7 +120,8 @@
                 <input type="checkbox" id="privacyPolicy" required>
                 <label for="privacyPolicy">
                     I agree to the
-                    <a href="/privacy-policy.html" target="_blank" style="text-decoration: underline;">Privacy Policy</a>
+                    <a href="/privacy-policy.html" target="_blank" style="text-decoration: underline;">Privacy
+                        Policy</a>
                 </label>
             </div>
 
@@ -134,14 +147,16 @@
 <section id="frame5" style="display: none;">
     <div class="content">
         <h1>Student Attendance Form</h1>
-        <img src="{{ url_for('static', filename='images/student-form-complete.png') }}" alt="Student form complete image">
+        <img src="{{ url_for('static', filename='images/student-form-complete.png') }}"
+             alt="Student form complete image">
         <p>✅ You're all set!</p>
         <p>Thanks for checking in. You may now close this tab.</p>
     </div>
 </section>
 
 <!-- Error Message Box -->
-<div id="errorMessage" style="display: none; color: white; background: #e63946; padding: 10px; margin: 10px 0; border-radius: 6px;"></div>
+<div id="errorMessage"
+     style="display: none; color: white; background: #e63946; padding: 10px; margin: 10px 0; border-radius: 6px;"></div>
 
 </body>
 </html>
