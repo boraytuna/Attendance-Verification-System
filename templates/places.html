@@ -1,211 +1,201 @@
 {% extends 'base.html' %}
 {% block content %}
 
-<html lang="en">
+    <html lang="en">
 
-<head>
-    <meta charset="UTF-8">
-    <title>Places Management</title>
+    <head>
+        <meta charset="UTF-8">
+        <title>Places Management</title>
 
-    <!-- Google Maps API -->
-    <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAzf_3rNo5yi24L3Mu35o5VHa
+        <!-- Google Maps API -->
+        <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAzf_3rNo5yi24L3Mu35o5VHa
         w1PwVmeTs&callback=initMap">
         </script>
 
-    <script>
-        let map;
+        <script>
+            let map;
 
-        function initMap() {
-            var center = { lat: 42.0792, lng: -78.4823 };
+            function initMap() {
+                var center = {
+                    lat: {{ lat|default(42.0792) }},
+                    lng: {{ lng|default(-78.4823) }}
+                };
 
-            map = new google.maps.Map(document.getElementById('map'), {
-                zoom: 15,
-                center: center
-            });
+                map = new google.maps.Map(document.getElementById('map'), {
+                    zoom: 15,
+                    center: center
+                });
 
-            var marker = new google.maps.Marker({
-                map: map,
-                position: center
-            });
+                var marker = new google.maps.Marker({
+                    map: map,
+                    position: center
+                });
 
-            // Listen for map clicks to place the marker
-            map.addListener('click', function (event) {
-                var lat = event.latLng.lat();
-                var lng = event.latLng.lng();
+                // Listen for map clicks to place the marker
+                map.addListener('click', function (event) {
+                    var lat = event.latLng.lat();
+                    var lng = event.latLng.lng();
 
-                // Move the marker to the clicked location
-                marker.setPosition({ lat: lat, lng: lng });
+                    // Move the marker to the clicked location
+                    marker.setPosition({lat: lat, lng: lng});
 
-                // Update the hidden input field with new coordinates
-                document.getElementById('place_location').value = `${lat},${lng}`;
-            });
+                    // Update the hidden input field with new coordinates
+                    document.getElementById('place_location').value = `${lat},${lng}`;
+                });
 
-            fetchPlaces(); // Load existing places into the table
-        }
+                fetchPlaces(); // Load existing places into the table
+            }
 
-        function fetchPlaces() {
-            fetch("/api/places")
-                .then(response => response.json())
-                .then(places => {
-                    const tableBody = document.getElementById("placesTableBody");
-                    tableBody.innerHTML = ""; // Clear existing table data
+            function fetchPlaces() {
+                fetch("/api/places")
+                    .then(response => response.json())
+                    .then(places => {
+                        const tableBody = document.getElementById("placesTableBody");
+                        tableBody.innerHTML = ""; // Clear existing table data
 
-                    places.forEach(place => {
-                        let row = `
+                        places.forEach(place => {
+                            let row = `
                             <tr>
                                 <td>${place.name}</td>
                                 <td>${place.building}</td>
                             </tr>
                         `;
-                        tableBody.innerHTML += row;
-                    });
-                })
-                .catch(error => console.error("Error loading places:", error));
-        }
-
-        function savePlace(event) {
-            event.preventDefault(); // Prevent page reload
-
-            const placeName = document.getElementById("place_name").value;
-            const building = document.getElementById("building").value;
-            const location = document.getElementById("place_location").value;
-
-            if (!placeName || !building || !location) {
-                alert("Please fill in all fields!");
-                return;
+                            tableBody.innerHTML += row;
+                        });
+                    })
+                    .catch(error => console.error("Error loading places:", error));
             }
 
-            const [latitude, longitude] = location.split(',');
+            function savePlace(event) {
+                event.preventDefault(); // Prevent page reload
 
-            fetch("/submit_place", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    name: placeName,
-                    building: building,
-                    latitude: latitude,
-                    longitude: longitude
+                const placeName = document.getElementById("place_name").value;
+                const building = document.getElementById("building").value;
+                const location = document.getElementById("place_location").value;
+
+                if (!placeName || !building || !location) {
+                    alert("Please fill in all fields!");
+                    return;
+                }
+
+                const [latitude, longitude] = location.split(',');
+
+                fetch("/submit_place", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({
+                        name: placeName,
+                        building: building,
+                        latitude: latitude,
+                        longitude: longitude
+                    })
                 })
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        fetchPlaces(); // Refresh table dynamically
-                        document.getElementById("placeForm").reset(); // Clear form
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // ✅ Redirect to dashboard with success flag
+                            window.location.href = data.redirect_url;
+                        } else {
+                            alert(data.message || "Error saving place.");
+                        }
+                    })
+                    .catch(error => console.error("Error submitting place:", error));
+            }
+        </script>
 
-                        // ✅ Show success message dynamically
-                        const message = document.createElement("div");
-                        message.className = "flash-message";
-                        message.style = "background-color: #d4edda; color: #155724; padding: 10px; border: 1px solid #c3e6cb; border-radius: 5px; margin: 20px auto; max-width: 600px; display: flex; justify-content: space-between; align-items: center;";
-                        message.innerHTML = `✅ Place was successfully added!
-                        <button onclick="this.parentElement.style.display='none'" style="background: none; border: none; font-weight: bold; cursor: pointer; color: #155724;">✖</button>`;
+        <style>
+            body {
+                font-family: 'Segoe UI', sans-serif;
+                margin: 30px;
+                background-color: #f5f6f7;
+                color: #333;
+            }
 
-                        document.body.insertBefore(message, document.body.firstChild);
+            h1 {
+                color: #0056b3;
+                margin-bottom: 20px;
+                text-align: center;
+            }
 
-                        setTimeout(() => {
-                            message.style.display = "none";
-                        }, 4000);
-                    } else {
-                        alert("Error saving place.");
-                    }
-                })
-                .catch(error => console.error("Error submitting place:", error));
-        }
-    </script>
+            form {
+                background-color: #fff;
+                padding: 20px;
+                border-radius: 10px;
+                box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+                margin-bottom: 30px;
+                max-width: 600px;
+                margin: auto;
+            }
 
-    <style>
-        body {
-            font-family: 'Segoe UI', sans-serif;
-            margin: 30px;
-            background-color: #f5f6f7;
-            color: #333;
-        }
+            label {
+                font-weight: bold;
+                display: block;
+                margin-top: 15px;
+            }
 
-        h1 {
-            color: #0056b3;
-            margin-bottom: 20px;
-            text-align: center;
-        }
+            input,
+            button {
+                margin-top: 5px;
+                padding: 10px;
+                width: 100%;
+                margin-bottom: 15px;
+                border: 1px solid #ccc;
+                border-radius: 5px;
+                box-sizing: border-box;
+            }
 
-        form {
-            background-color: #fff;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
-            margin-bottom: 30px;
-            max-width: 600px;
-            margin: auto;
-        }
+            button {
+                background-color: #0056b3;
+                color: #fff;
+                cursor: pointer;
+                transition: background-color 0.3s;
+            }
 
-        label {
-            font-weight: bold;
-            display: block;
-            margin-top: 15px;
-        }
+            button:hover {
+                background-color: #004494;
+            }
 
-        input,
-        button {
-            margin-top: 5px;
-            padding: 10px;
-            width: 100%;
-            margin-bottom: 15px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            box-sizing: border-box;
-        }
+            #map {
+                height: 300px;
+                width: 100%;
+                margin-top: 20px;
+                border: 2px solid #ccc;
+                border-radius: 10px;
+            }
 
-        button {
-            background-color: #0056b3;
-            color: #fff;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 30px;
+                background-color: #fff;
+                box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            }
 
-        button:hover {
-            background-color: #004494;
-        }
+            th,
+            td {
+                padding: 12px;
+                border: 1px solid #ccc;
+                text-align: center;
+                width: 50%;
+            }
 
-        #map {
-            height: 300px;
-            width: 100%;
-            margin-top: 20px;
-            border: 2px solid #ccc;
-            border-radius: 10px;
-        }
+            th {
+                background-color: #0056b3;
+                color: #fff;
+            }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 30px;
-            background-color: #fff;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-        }
+            tr:nth-child(even) {
+                background-color: #f2f2f2;
+            }
 
-        th,
-        td {
-            padding: 12px;
-            border: 1px solid #ccc;
-            text-align: center;
-            width: 50%;
-        }
+            .table-container {
+                max-width: 800px;
+                margin: auto;
+            }
+        </style>
+    </head>
 
-        th {
-            background-color: #0056b3;
-            color: #fff;
-        }
-
-        tr:nth-child(even) {
-            background-color: #f2f2f2;
-        }
-
-        .table-container {
-            max-width: 800px;
-            margin: auto;
-        }
-    </style>
-</head>
-
-<body onload="initMap()">
+    <body onload="initMap()">
     <h1>🏙️ Place Management</h1>
 
     <!-- Place Creation Form -->
@@ -230,18 +220,18 @@
     <div class="table-container">
         <table>
             <thead>
-                <tr>
-                    <th>Name</th>
-                    <th>Building</th>
-                </tr>
+            <tr>
+                <th>Name</th>
+                <th>Building</th>
+            </tr>
             </thead>
             <tbody id="placesTableBody">
-                <!-- Data will be dynamically added here -->
+            <!-- Data will be dynamically added here -->
             </tbody>
         </table>
     </div>
-</body>
+    </body>
 
-</html>
+    </html>
 
 {% endblock %}

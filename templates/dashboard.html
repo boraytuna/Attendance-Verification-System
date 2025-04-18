@@ -160,13 +160,36 @@
     <div class="dashboard-container" style="padding: 30px;">
         <h1 style="text-align: center;">📋 Event Dashboard</h1>
         <p>Welcome, {{ session['first_name'] }} {{ session['last_name'] }}!</p>
-        {% if request.args.get('success') == '1' %}
+        {% if request.args.get('created') == '1' %}
             <div class="flash-message"
                  style="background-color: #d4edda; color: #155724; padding: 12px; border: 1px solid #c3e6cb; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
                 ✅ Event created successfully!
                 <button onclick="this.parentElement.style.display='none'"
-                        style="background: none; border: none; font-weight: bold; cursor: pointer; color: #155724;">
-                    ✖
+                        style="background: none; border: none; font-weight: bold; cursor: pointer; color: #155724;">✖
+                </button>
+            </div>
+        {% elif request.args.get('edited') == '1' %}
+            <div class="flash-message"
+                 style="background-color: #d4edda; color: #155724; padding: 12px; border: 1px solid #c3e6cb; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+                ✅ Event updated successfully!
+                <button onclick="this.parentElement.style.display='none'"
+                        style="background: none; border: none; font-weight: bold; cursor: pointer; color: #155724;">✖
+                </button>
+            </div>
+        {% elif request.args.get('deleted') == '1' %}
+            <div class="flash-message"
+                 style="background-color: #d4edda; color: #155724; padding: 12px; border: 1px solid #c3e6cb; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+                ✅ Event deleted successfully!
+                <button onclick="this.parentElement.style.display='none'"
+                        style="background: none; border: none; font-weight: bold; cursor: pointer; color: #155724;">✖
+                </button>
+            </div>
+        {% elif request.args.get('place_created') == '1' %}
+            <div class="flash-message"
+                 style="background-color: #d4edda; color: #155724; padding: 12px; border: 1px solid #c3e6cb; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+                ✅ New place created successfully!
+                <button onclick="this.parentElement.style.display='none'"
+                        style="background: none; border: none; font-weight: bold; cursor: pointer; color: #155724;">✖
                 </button>
             </div>
         {% endif %}
@@ -180,30 +203,31 @@
             {{ render_table(past_events, '🕘 Past Events', 'past_page', past_total, per_page, past_page) }}
         </div>
     </div>
+
     <script>
-    document.addEventListener("DOMContentLoaded", function () {
-        let currentPage = {{ current_page }};
-        let upcomingPage = {{ upcoming_page }};
-        let pastPage = {{ past_page }};
+        document.addEventListener("DOMContentLoaded", function () {
+            let currentPage = {{ current_page }};
+            let upcomingPage = {{ upcoming_page }};
+            let pastPage = {{ past_page }};
 
-        function loadDashboardData() {
-            fetch(`/api/dashboard_data?current_page=${currentPage}&upcoming_page=${upcomingPage}&past_page=${pastPage}`)
-                .then(response => response.json())
-                .then(data => {
-                    renderSection("current", data.current_events, data.current_total, currentPage, "🟡 Events Happening Now", "current_page");
-                    renderSection("upcoming", data.upcoming_events, data.upcoming_total, upcomingPage, "📅 Upcoming Events", "upcoming_page");
-                    renderSection("past", data.past_events, data.past_total, pastPage, "🕘 Past Events", "past_page");
-                });
-        }
-
-        function renderSection(id, events, total, page, title, pageVar) {
-            const container = document.getElementById(`${id}-events-section`);
-            if (!events.length) {
-                container.innerHTML = `<h2>${title}</h2><p>No events for this category.</p>`;
-                return;
+            function loadDashboardData() {
+                fetch(`/api/dashboard_data?current_page=${currentPage}&upcoming_page=${upcomingPage}&past_page=${pastPage}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        renderSection("current", data.current_events, data.current_total, currentPage, "🟡 Events Happening Now", "current_page");
+                        renderSection("upcoming", data.upcoming_events, data.upcoming_total, upcomingPage, "📅 Upcoming Events", "upcoming_page");
+                        renderSection("past", data.past_events, data.past_total, pastPage, "🕘 Past Events", "past_page");
+                    });
             }
 
-            let html = `<h2>${title}</h2>
+            function renderSection(id, events, total, page, title, pageVar) {
+                const container = document.getElementById(`${id}-events-section`);
+                if (!events.length) {
+                    container.innerHTML = `<h2>${title}</h2><p>No events for this category.</p>`;
+                    return;
+                }
+
+                let html = `<h2>${title}</h2>
                         <table class="table">
                         <thead>
                             <tr>
@@ -216,49 +240,49 @@
                         </thead>
                         <tbody>`;
 
-            events.forEach(event => {
-                const date = (title !== "🟡 Events Happening Now") ? `${event.eventDate} ` : "";
-                const location = event.place_name ? `${event.place_name} (${event.building})` : event.eventAddress || "N/A";
-                html += `<tr>
+                events.forEach(event => {
+                    const date = (title !== "🟡 Events Happening Now") ? `${event.eventDate} ` : "";
+                    const location = event.place_name ? `${event.place_name} (${event.building})` : event.eventAddress || "N/A";
+                    html += `<tr>
                             <td>${event.eventName}</td>
                             <td>${date}${event.startTime} - ${event.stopTime}</td>
                             <td>${location}</td>
                             <td><a class="qr-button-link" href="/qr_code/${event.eventID}" target="_blank">Show QR</a></td>
                             <td><a class="more-info-btn" href="/event_info/${event.eventID}">More Information</a></td>
                          </tr>`;
+                });
+
+                html += `</tbody></table><div class="pagination" data-section="${pageVar}" style="text-align:center;">`;
+
+                const totalPages = Math.ceil(total / {{ per_page }});
+                for (let i = 1; i <= totalPages; i++) {
+                    if (i === page) {
+                        html += `<span style="margin: 0 5px; font-weight: bold;">${i}</span>`;
+                    } else {
+                        html += `<a href="#" class="pagination-link" data-page="${i}" data-section="${pageVar}" style="margin: 0 5px;">${i}</a>`;
+                    }
+                }
+
+                html += `</div>`;
+                container.innerHTML = html;
+            }
+
+            document.addEventListener("click", function (e) {
+                if (e.target.classList.contains("pagination-link")) {
+                    e.preventDefault();
+                    const page = parseInt(e.target.dataset.page);
+                    const section = e.target.dataset.section;
+
+                    if (section === 'current_page') currentPage = page;
+                    if (section === 'upcoming_page') upcomingPage = page;
+                    if (section === 'past_page') pastPage = page;
+
+                    loadDashboardData();
+                }
             });
 
-            html += `</tbody></table><div class="pagination" data-section="${pageVar}" style="text-align:center;">`;
-
-            const totalPages = Math.ceil(total / {{ per_page }});
-            for (let i = 1; i <= totalPages; i++) {
-                if (i === page) {
-                    html += `<span style="margin: 0 5px; font-weight: bold;">${i}</span>`;
-                } else {
-                    html += `<a href="#" class="pagination-link" data-page="${i}" data-section="${pageVar}" style="margin: 0 5px;">${i}</a>`;
-                }
-            }
-
-            html += `</div>`;
-            container.innerHTML = html;
-        }
-
-        document.addEventListener("click", function (e) {
-            if (e.target.classList.contains("pagination-link")) {
-                e.preventDefault();
-                const page = parseInt(e.target.dataset.page);
-                const section = e.target.dataset.section;
-
-                if (section === 'current_page') currentPage = page;
-                if (section === 'upcoming_page') upcomingPage = page;
-                if (section === 'past_page') pastPage = page;
-
-                loadDashboardData();
-            }
+            // Initial load
+            loadDashboardData();
         });
-
-        // Initial load
-        loadDashboardData();
-    });
-</script>
+    </script>
 {% endblock %}

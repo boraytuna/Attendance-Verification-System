@@ -291,51 +291,6 @@ def submit_logout():
     # redirect to the landing page
     return redirect(url_for("landing_page"))
 
-
-# @app.route("/dashboard")
-# @login_required
-# def dashboard():
-#     user_id = session["user_id"]
-#     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-#
-#     conn = get_db_connection()
-#     cursor = conn.cursor()
-#
-#     # UPCOMING EVENTS — start time is in the future
-#     cursor.execute("""
-#         SELECT e.*, p.name AS place_name, p.building
-#         FROM events e
-#         LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
-#         WHERE eventDate || 'T' || startTime > ? AND professorID = ?
-#         ORDER BY eventDate, startTime
-#     """, (now, user_id))
-#     upcoming = cursor.fetchall()
-#
-#     # CURRENT EVENTS — now is between start and stop
-#     cursor.execute("""
-#         SELECT e.*, p.name AS place_name, p.building
-#         FROM events e
-#         LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
-#         WHERE eventDate || 'T' || startTime <= ?
-#           AND eventDate || 'T' || stopTime >= ?
-#           AND professorID = ?
-#         ORDER BY eventDate, startTime
-#     """, (now, now, user_id))
-#     current = cursor.fetchall()
-#
-#     # PAST EVENTS — stop time is in the past
-#     cursor.execute("""
-#         SELECT e.*, p.name AS place_name, p.building
-#         FROM events e
-#         LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
-#         WHERE eventDate || 'T' || stopTime < ? AND professorID = ?
-#         ORDER BY eventDate DESC, startTime DESC
-#     """, (now, user_id))
-#     past = cursor.fetchall()
-#
-#     conn.close()
-#     return render_template("dashboard.html", upcoming_events=upcoming, current_events=current, past_events=past)
-
 @app.route("/api/dashboard_data")
 @login_required
 def get_dashboard_data():
@@ -1359,6 +1314,78 @@ def get_event_information():
 
     return jsonify(formatted_events)
 
+@app.route("/edit_event/<int:event_id>", methods=["GET", "POST"])
+@login_required
+def edit_event(event_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    if request.method == "POST":
+        # Get updated form data
+        name = request.form.get("event_name")
+        description = request.form.get("event_description")
+        date = request.form.get("event_date")
+        start_time = request.form.get("start_time")
+        stop_time = request.form.get("stop_time")
+        latlng = request.form.get("event_location")
+        lat, lng = map(float, latlng.split(","))
+
+        # Combine times
+        now = datetime.now()
+        start_dt = datetime.strptime(f"{date} {start_time}", "%Y-%m-%d %H:%M")
+        stop_dt = datetime.strptime(f"{date} {stop_time}", "%Y-%m-%d %H:%M")
+
+        # Reject if start or stop time are invalid
+        if start_dt <= now:
+            return "⛔ You cannot schedule an event that starts in the past.", 400
+        if stop_dt <= now:
+            return "⛔ Event end time must be in the future.", 400
+        if stop_dt <= start_dt:
+            return "⛔ End time must be after start time.", 400
+
+        # Update the event in the database
+        cursor.execute("""
+            UPDATE events SET eventName = ?, eventDescription = ?, eventDate = ?, startTime = ?, stopTime = ?, latitude = ?, longitude = ?
+            WHERE eventID = ? AND professorID = ?
+        """, (name, description, date, start_time, stop_time, lat, lng, event_id, session["user_id"]))
+        conn.commit()
+        conn.close()
+
+        return redirect(url_for("dashboard", edited=1))
+
+    # --- GET method logic ---
+    event = cursor.execute("""
+        SELECT * FROM events WHERE eventID = ? AND professorID = ?
+    """, (event_id, session["user_id"])).fetchone()
+
+    conn.close()
+
+    if not event:
+        return "Unauthorized or event not found", 403
+
+    return render_template("edit_event.html", event=event)
+
+@app.route("/delete_event/<int:event_id>", methods=["POST"])
+@login_required
+def delete_event(event_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Check if event has any student check-ins
+    cursor.execute("SELECT COUNT(*) FROM student_checkins WHERE scannedEventID = ?", (event_id,))
+    checkin_count = cursor.fetchone()[0]
+
+    if checkin_count > 0:
+        conn.close()
+        flash("❌ Cannot delete this event because students have already checked in.", "error")
+        return redirect(url_for("edit_event", event_id=event_id))
+
+    # Proceed with deletion
+    cursor.execute("DELETE FROM events WHERE eventID = ? AND professorID = ?", (event_id, session["user_id"]))
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("dashboard", deleted=1))
 
 @app.route("/submit_place", methods=["POST"])
 @login_required
@@ -1381,7 +1408,8 @@ def submit_place():
     conn.commit()
     conn.close()
 
-    return jsonify({"success": True, "message": "Place added successfully"})
+    # ✅ Return URL to redirect client to dashboard
+    return jsonify({"success": True, "redirect_url": url_for("dashboard", place_created=1)})
 
 
 # Route: Fetch all places
@@ -1456,27 +1484,30 @@ def find_student():
 
     return render_template('find_student.html', students=students)
 
+
+@app.template_filter('todatetime')
+def todatetime_filter(value, format="%Y-%m-%d %H:%M"):
+    return datetime.strptime(value, format)
+
 @app.route("/event_info/<int:event_id>")
 @login_required
 def event_info(event_id):
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Fetch event details along with stopTime
-    cursor.execute("""
+    event = cursor.execute("""
         SELECT e.*, p.name AS place_name, p.building
         FROM events e
         LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
         WHERE e.eventID = ?
-    """, (event_id,))
-    event = cursor.fetchone()
-
+    """, (event_id,)).fetchone()
     conn.close()
 
-    if event:
-        return render_template("event_info.html", event=event)
-    else:
+    if not event:
         return "Event not found", 404
+
+    # Pass current datetime as a string to match format in Jinja
+    return render_template("event_info.html", event=event, now=datetime.now().strftime("%Y-%m-%d %H:%M"))
 
 @app.route("/test_send_email/<int:event_id>")
 def test_send_email(event_id):

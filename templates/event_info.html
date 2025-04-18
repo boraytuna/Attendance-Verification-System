@@ -135,6 +135,22 @@
             {% endif %}
         </div>
 
+
+        {% set event_start_str = event['eventDate'] ~ ' ' ~ event['startTime'] %}
+        {% set event_start_dt = event_start_str | todatetime('%Y-%m-%d %H:%M') %}
+        {% if event_start_dt > (now | todatetime('%Y-%m-%d %H:%M')) %}
+            <div style="text-align: center; margin-top: 20px;">
+                <a href="{{ url_for('edit_event', event_id=event['eventID']) }}" class="dashboard-btn"
+                   style="background-color: #ffc107;">
+                    ✏️ Edit This Event
+                </a>
+            </div>
+        {% else %}
+            <p style="text-align: center; color: #999; font-style: italic; margin-top: 20px;">
+                This event is currently in progress or has ended and cannot be edited.
+            </p>
+        {% endif %}
+
         <a href="/dashboard" class="dashboard-btn">Back to Dashboard</a>
     </div>
 
