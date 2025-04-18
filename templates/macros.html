@@ -1,0 +1,40 @@
+{% macro render_table(events, section_name, page_var, total, per_page, current_page) %}
+    <h2>{{ section_name }}</h2>
+    {% if events %}
+        <table class="table">
+            <thead>
+            <tr>
+                <th>Event</th>
+                <th>Time</th>
+                <th>Location</th>
+                <th>QR Code</th>
+                <th>More Information</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for event in events %}
+                <tr>
+                    <td>{{ event['eventName'] }}</td>
+                    <td>{{ event['eventDate'] if section_name != '🟡 Events Happening Now' else '' }} {{ event['startTime'] }} - {{ event['stopTime'] }}</td>
+                    <td>{{ event['place_name'] ~ ' (' ~ event['building'] ~ ')' if event['place_name'] else event['eventAddress'] }}</td>
+                    <td><a class="qr-button-link" href="/qr_code/{{ event['eventID'] }}" target="_blank">Show QR</a></td>
+                    <td><a class="more-info-btn" href="/event_info/{{ event['eventID'] }}">More Information</a></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+
+        <div style="margin-top: 10px; text-align: center;">
+            {% set total_pages = (total // per_page) + (1 if total % per_page > 0 else 0) %}
+            {% for page in range(1, total_pages + 1) %}
+                {% if page == current_page %}
+                    <span style="margin: 0 5px; font-weight: bold;">{{ page }}</span>
+                {% else %}
+                    <a href="#" class="pagination-link" data-section="{{ page_var }}" data-page="{{ page }}" style="margin: 0 5px;">{{ page }}</a>
+                {% endif %}
+            {% endfor %}
+        </div>
+    {% else %}
+        <p>No events for this category.</p>
+    {% endif %}
+{% endmacro %}

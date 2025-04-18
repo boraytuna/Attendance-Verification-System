@@ -123,6 +123,18 @@
             </tbody>
         </table>
 
+        <!-- EVENT DESCRIPTION SECTION -->
+        <div style="margin-top: 30px; background-color: #fdfdfd; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.05);">
+            <h2 style="text-align: center; color: #0056b3;">📝 About This Event</h2>
+            {% if event['eventDescription'] %}
+                <p style="margin-top: 15px; line-height: 1.6; font-size: 16px; color: #444;">
+                    {{ event['eventDescription'] }}
+                </p>
+            {% else %}
+                <p style="text-align: center; color: #888;">No description provided for this event.</p>
+            {% endif %}
+        </div>
+
         <a href="/dashboard" class="dashboard-btn">Back to Dashboard</a>
     </div>
 

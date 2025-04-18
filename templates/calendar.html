@@ -37,12 +37,12 @@
 
     <!-- ✅ Modal for Event Details -->
     <div id="eventModal" class="modal" style="display: none;">
-    <div class="modal-content" style="text-align: center;">
-        <span class="close-button" style="float: right; font-size: 20px; cursor: pointer;">&times;</span>
-        <h2 id="modalTitle" style="margin-top: 10px; font-size: 24px;"></h2>
-        <div id="modalInfo" style="margin-top: 20px; font-size: 16px;"></div>
+        <div class="modal-content" style="text-align: center;">
+            <span class="close-button" style="float: right; font-size: 20px; cursor: pointer;">&times;</span>
+            <h2 id="modalTitle" style="margin-top: 10px; font-size: 24px;"></h2>
+            <div id="modalInfo" style="margin-top: 20px; font-size: 16px;"></div>
+        </div>
     </div>
-</div>
 
 
     <link rel="stylesheet" href="{{ url_for('static', filename='css/calendar.css') }}">
@@ -126,32 +126,42 @@
             const closeButton = document.querySelector(".close-button");
 
             function showModal(event) {
-    const title = event.eventName;
-    const date = event.eventDate;
-    const time = `${event.startTime} - ${event.stopTime}`;
+                const title = event.eventName;
+                const date = event.eventDate;
+                const time = `${event.startTime} - ${event.stopTime}`;
 
-    const location = event.place_name && event.building
-        ? `${event.place_name} (${event.building})`
-        : event.building || event.eventAddress || `${event.latitude}, ${event.longitude}`;
+                const location = event.place_name && event.building
+                    ? `${event.place_name} (${event.building})`
+                    : event.building || event.eventAddress || `${event.latitude}, ${event.longitude}`;
 
-    const recurrence = event.recurrenceType
-        ? `<strong>Recurring:</strong> <span style="font-style: italic;">${event.recurrenceType}</span>`
-        : `<span style="font-style: italic;">One-time event</span>`;
+                const recurrence = event.recurrenceType
+                    ? `<strong>Recurring:</strong> <span style="font-style: italic;">${event.recurrenceType}</span>`
+                    : `<span style="font-style: italic;">One-time event</span>`;
 
-    document.getElementById("modalTitle").textContent = title;
+                document.getElementById("modalTitle").textContent = title;
 
-    document.getElementById("modalInfo").innerHTML = `
-        <div style="margin-top: 8px;"><strong>Date:</strong> ${date}</div>
-        <div style="margin-top: 8px;"><strong>Time:</strong> ${time}</div>
-        <div style="margin-top: 8px;"><strong>Location:</strong> ${location}</div>
-        <div style="margin-top: 8px;">${recurrence}</div>
-        <div style="margin-top: 20px;">
-            <a class="qr-button-link" href="/qr_code/${event.eventID}" target="_blank">📲 Show QR</a>
+                document.getElementById("modalInfo").innerHTML = `
+    <div style="margin-top: 8px;"><strong>Date:</strong> ${date}</div>
+    <div style="margin-top: 8px;"><strong>Time:</strong> ${time}</div>
+    <div style="margin-top: 8px;"><strong>Location:</strong> ${location}</div>
+    <div style="margin-top: 8px;">${recurrence}</div>
+
+    ${event.eventDescription ? `
+        <div style="margin-top: 15px; padding: 12px; background-color: #f9f9f9; border-radius: 6px; font-size: 15px; color: #444; text-align: left;">
+            <strong>Event Info:</strong><br>
+            <div style="margin-top: 5px;">${event.eventDescription}</div>
         </div>
-    `;
+    ` : `
+        <div style="margin-top: 15px; font-style: italic; color: #999;">No event description provided.</div>
+    `}
 
-    modal.style.display = "block";
-}
+    <div style="margin-top: 20px;">
+        <a class="qr-button-link" href="/qr_code/${event.eventID}" target="_blank">📲 Show QR</a>
+    </div>
+`;
+
+                modal.style.display = "block";
+            }
 
             closeButton.onclick = () => {
                 modal.style.display = "none";

@@ -1,4 +1,5 @@
-from flask import Flask, session, render_template, request, redirect, jsonify, send_file, flash, url_for
+from flask import Flask, session, render_template, request, redirect, jsonify, send_file, flash, url_for, \
+    render_template_string
 from flask_mail import Mail, Message
 import sqlite3
 import os
@@ -101,7 +102,10 @@ def create_tables():
             recurrenceType TEXT,              -- daily, weekly, monthly
             recurrenceStartDate DATE,         -- Start of the recurrence range
             recurrenceEndDate DATE,           -- End of the recurrence range
-            recurrenceGroup TEXT              -- Shared ID for all events in a series
+            recurrenceGroup TEXT,             -- Shared ID for all events in a series
+
+            -- New description column
+            eventDescription TEXT DEFAULT ''
         )
     ''')
 
@@ -126,14 +130,14 @@ def create_tables():
 
     # Create Places Table
     cursor.execute('''
-            CREATE TABLE IF NOT EXISTS places (
-                placeID INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                latitude REAL NOT NULL,
-                longitude REAL NOT NULL,
-                building TEXT NOT NULL
-            )
-        ''')
+        CREATE TABLE IF NOT EXISTS places (
+            placeID INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            latitude REAL NOT NULL,
+            longitude REAL NOT NULL,
+            building TEXT NOT NULL
+        )
+    ''')
 
     conn.commit()
     conn.close()
@@ -288,16 +292,116 @@ def submit_logout():
     return redirect(url_for("landing_page"))
 
 
+# @app.route("/dashboard")
+# @login_required
+# def dashboard():
+#     user_id = session["user_id"]
+#     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+#
+#     conn = get_db_connection()
+#     cursor = conn.cursor()
+#
+#     # UPCOMING EVENTS — start time is in the future
+#     cursor.execute("""
+#         SELECT e.*, p.name AS place_name, p.building
+#         FROM events e
+#         LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
+#         WHERE eventDate || 'T' || startTime > ? AND professorID = ?
+#         ORDER BY eventDate, startTime
+#     """, (now, user_id))
+#     upcoming = cursor.fetchall()
+#
+#     # CURRENT EVENTS — now is between start and stop
+#     cursor.execute("""
+#         SELECT e.*, p.name AS place_name, p.building
+#         FROM events e
+#         LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
+#         WHERE eventDate || 'T' || startTime <= ?
+#           AND eventDate || 'T' || stopTime >= ?
+#           AND professorID = ?
+#         ORDER BY eventDate, startTime
+#     """, (now, now, user_id))
+#     current = cursor.fetchall()
+#
+#     # PAST EVENTS — stop time is in the past
+#     cursor.execute("""
+#         SELECT e.*, p.name AS place_name, p.building
+#         FROM events e
+#         LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
+#         WHERE eventDate || 'T' || stopTime < ? AND professorID = ?
+#         ORDER BY eventDate DESC, startTime DESC
+#     """, (now, user_id))
+#     past = cursor.fetchall()
+#
+#     conn.close()
+#     return render_template("dashboard.html", upcoming_events=upcoming, current_events=current, past_events=past)
+
+@app.route("/api/dashboard_data")
+@login_required
+def get_dashboard_data():
+    user_id = session["user_id"]
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+    # Get pagination args
+    per_page = 5
+    current_page = int(request.args.get("current_page", 1))
+    upcoming_page = int(request.args.get("upcoming_page", 1))
+    past_page = int(request.args.get("past_page", 1))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    def paginate(query, args, page):
+        offset = (page - 1) * per_page
+        results = cursor.execute(query + " LIMIT ? OFFSET ?", args + [per_page, offset]).fetchall()
+        total = cursor.execute("SELECT COUNT(*) FROM (" + query + ")", args).fetchone()[0]
+        return [dict(r) for r in results], total
+
+    # CURRENT
+    query = """SELECT e.*, p.name AS place_name, p.building FROM events e
+               LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
+               WHERE eventDate || 'T' || startTime <= ? AND eventDate || 'T' || stopTime >= ? AND professorID = ?
+               ORDER BY eventDate, startTime"""
+    current, current_total = paginate(query, [now, now, user_id], current_page)
+
+    # UPCOMING
+    query = """SELECT e.*, p.name AS place_name, p.building FROM events e
+               LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
+               WHERE eventDate || 'T' || startTime > ? AND professorID = ?
+               ORDER BY eventDate, startTime"""
+    upcoming, upcoming_total = paginate(query, [now, user_id], upcoming_page)
+
+    # PAST
+    query = """SELECT e.*, p.name AS place_name, p.building FROM events e
+               LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
+               WHERE eventDate || 'T' || stopTime < ? AND professorID = ?
+               ORDER BY eventDate DESC, startTime DESC"""
+    past, past_total = paginate(query, [now, user_id], past_page)
+
+    conn.close()
+    return jsonify({
+        "current_events": current, "current_total": current_total,
+        "upcoming_events": upcoming, "upcoming_total": upcoming_total,
+        "past_events": past, "past_total": past_total,
+        "per_page": per_page
+    })
+
 @app.route("/dashboard")
 @login_required
 def dashboard():
     user_id = session["user_id"]
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    per_page = 5  # how many events per page
+
+    # Get current page numbers from URL
+    upcoming_page = int(request.args.get("upcoming_page", 1))
+    current_page = int(request.args.get("current_page", 1))
+    past_page = int(request.args.get("past_page", 1))
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # UPCOMING EVENTS — start time is in the future
+    # -- UPCOMING --
     cursor.execute("""
         SELECT e.*, p.name AS place_name, p.building
         FROM events e
@@ -305,9 +409,10 @@ def dashboard():
         WHERE eventDate || 'T' || startTime > ? AND professorID = ?
         ORDER BY eventDate, startTime
     """, (now, user_id))
-    upcoming = cursor.fetchall()
+    upcoming_all = cursor.fetchall()
+    upcoming = upcoming_all[(upcoming_page - 1) * per_page: upcoming_page * per_page]
 
-    # CURRENT EVENTS — now is between start and stop
+    # -- CURRENT --
     cursor.execute("""
         SELECT e.*, p.name AS place_name, p.building
         FROM events e
@@ -317,9 +422,10 @@ def dashboard():
           AND professorID = ?
         ORDER BY eventDate, startTime
     """, (now, now, user_id))
-    current = cursor.fetchall()
+    current_all = cursor.fetchall()
+    current = current_all[(current_page - 1) * per_page: current_page * per_page]
 
-    # PAST EVENTS — stop time is in the past
+    # -- PAST --
     cursor.execute("""
         SELECT e.*, p.name AS place_name, p.building
         FROM events e
@@ -327,11 +433,88 @@ def dashboard():
         WHERE eventDate || 'T' || stopTime < ? AND professorID = ?
         ORDER BY eventDate DESC, startTime DESC
     """, (now, user_id))
-    past = cursor.fetchall()
+    past_all = cursor.fetchall()
+    past = past_all[(past_page - 1) * per_page: past_page * per_page]
 
     conn.close()
-    return render_template("dashboard.html", upcoming_events=upcoming, current_events=current, past_events=past)
 
+    return render_template("dashboard.html",
+                           current_events=current,
+                           upcoming_events=upcoming,
+                           past_events=past,
+                           current_total=len(current_all),
+                           upcoming_total=len(upcoming_all),
+                           past_total=len(past_all),
+                           per_page=per_page,
+                           current_page=current_page,
+                           upcoming_page=upcoming_page,
+                           past_page=past_page)
+
+@app.route("/dashboard_partial/current")
+@login_required
+def dashboard_current_partial():
+    return render_partial_events("current")
+
+@app.route("/dashboard_partial/upcoming")
+@login_required
+def dashboard_upcoming_partial():
+    return render_partial_events("upcoming")
+
+@app.route("/dashboard_partial/past")
+@login_required
+def dashboard_past_partial():
+    return render_partial_events("past")
+
+def render_partial_events(section):
+    user_id = session["user_id"]
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    per_page = 5
+
+    try:
+        page = int(request.args.get("page", 1))
+    except (ValueError, TypeError):
+        page = 1
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    query_base = """
+        SELECT e.*, p.name AS place_name, p.building
+        FROM events e
+        LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
+        WHERE professorID = ?
+    """
+    args = [user_id]
+
+    if section == "current":
+        query_base += " AND eventDate || 'T' || startTime <= ? AND eventDate || 'T' || stopTime >= ?"
+        args = [now, now, user_id]
+        order = " ORDER BY eventDate, startTime"
+        section_name = "🟡 Events Happening Now"
+        page_var = "current_page"
+    elif section == "upcoming":
+        query_base += " AND eventDate || 'T' || startTime > ?"
+        args = [now, user_id]
+        order = " ORDER BY eventDate, startTime"
+        section_name = "📅 Upcoming Events"
+        page_var = "upcoming_page"
+    else:
+        query_base += " AND eventDate || 'T' || stopTime < ?"
+        args = [now, user_id]
+        order = " ORDER BY eventDate DESC, startTime DESC"
+        section_name = "🕘 Past Events"
+        page_var = "past_page"
+
+    full_query = query_base + order
+    all_rows = cursor.execute(full_query, args).fetchall()
+    paginated = all_rows[(page - 1) * per_page: page * per_page]
+    conn.close()
+
+    return render_template_string("""
+        {% from 'macros.html' import render_table %}
+        {{ render_table(events, section_name, page_var, total, per_page, current_page) }}
+    """, events=paginated, section_name=section_name, page_var=page_var,
+       total=len(all_rows), per_page=per_page, current_page=page)
 
 @app.route("/events")
 @login_required
@@ -946,6 +1129,7 @@ def submit_event():
     stop_time = request.form.get("stop_time")
     event_location = request.form.get("event_location")
     is_recurring = request.form.get("is_recurring") == "true"
+    event_description = request.form.get("event_info", "").strip()
 
     recurrence_type = request.form.get("recurrence", "none")
     # 🔒 Block if recurrence type is 'none' but user selected recurring (unless they confirmed)
@@ -1029,8 +1213,8 @@ def submit_event():
                     eventName, eventDate, startTime, stopTime,
                     latitude, longitude, professorID,
                     isRecurring, recurrenceType, recurrenceStartDate,
-                    recurrenceEndDate, recurrenceGroup
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    recurrenceEndDate, recurrenceGroup, eventDescription
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 event_name,
                 current_date.strftime("%Y-%m-%d"),
@@ -1038,7 +1222,7 @@ def submit_event():
                 lat, lng, professor_id,
                 True, recurrence_type,
                 recurrence_start, recurrence_end,
-                recurrence_group
+                recurrence_group, event_description
             ))
 
             event_id = cursor.lastrowid
@@ -1101,9 +1285,9 @@ def submit_event():
         cursor.execute('''
             INSERT INTO events (
                 eventName, eventDate, startTime, stopTime,
-                latitude, longitude, professorID
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (event_name, event_date, start_time, stop_time, lat, lng, professor_id))
+                latitude, longitude, professorID, eventDescription
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (event_name, event_date, start_time, stop_time, lat, lng, professor_id, event_description))
 
         event_id = cursor.lastrowid
         conn.commit()
@@ -1144,6 +1328,7 @@ def get_event_information():
     cursor.execute("""
         SELECT e.eventID, e.eventName, e.eventDate, e.startTime, e.stopTime,
                e.latitude, e.longitude, e.recurrenceType, e.isRecurring,
+               e.eventDescription,
                p.name AS place_name, p.building
         FROM events e
         LEFT JOIN places p ON e.latitude = p.latitude AND e.longitude = p.longitude
@@ -1166,7 +1351,8 @@ def get_event_information():
             "longitude": event_dict["longitude"],
             "recurrenceType": event_dict["recurrenceType"] if event_dict["isRecurring"] else None,
             "place_name": event_dict.get("place_name"),
-            "building": event_dict.get("building")
+            "building": event_dict.get("building"),
+            "eventDescription": event_dict.get("eventDescription", "")
         }
 
         formatted_events.append(formatted_event)
