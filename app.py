@@ -739,7 +739,7 @@ def construct_email_records(event_id):
         dist_checkin = haversine_distance(event_lat, event_lon, start_lat, start_lon)
         dist_checkout = haversine_distance(event_lat, event_lon, end_lat, end_lon)
 
-        if dist_checkin <= 100 and dist_checkout <= 100:
+        if dist_checkin <= 200 and dist_checkout <= 200:
             if professor not in emails:
                 emails[professor] = []
 
@@ -749,6 +749,7 @@ def construct_email_records(event_id):
                 'email': email,
                 'event_name': event_name,
                 'event_id': event_id,
+                'event_date': event_date,
                 'official_start': start_time,
                 'official_end': stop_time,
                 'checkin_time': checkin_time,
@@ -793,7 +794,7 @@ def send_professor_emails(event_id):
         print(f"[📨 EMAIL TO] {professor} → {professor_email}")
 
         # Plaintext fallback
-        plaintext_msg = f"Hello {professor},\nHere is the attendance summary for {event_name}:\n"
+        plaintext_msg = f"Hello {professor},\nHere is the attendance summary for {event_name} on {student_rows[0]['event_date']}:\n"
         for s in student_rows:
             plaintext_msg += f"{s['first_name']} {s['last_name']} | {s['email']} | Check-in: {s['checkin_time']} | Check-out: {s['checkout_time']}\n"
 
@@ -802,12 +803,13 @@ def send_professor_emails(event_id):
         <html>
             <body>
                 <p>Hello {professor},</p>
-                <p>Here is the attendance summary for <strong>{event_name}</strong>:</p>
+                <p>Here is the attendance summary for <strong>{event_name}</strong> on <strong>{student_rows[0]['event_date']}</strong>:</p>
                 <table border="1" style="border-collapse: collapse; width: 100%;">
                     <tr>
                         <th>Name</th>
                         <th>Email</th>
                         <th>Event ID</th>
+                        <th>Event Date</th>
                         <th>Official Start</th>
                         <th>Official End</th>
                         <th>Check-in</th>
@@ -821,6 +823,7 @@ def send_professor_emails(event_id):
                     <td>{s['first_name']} {s['last_name']}</td>
                     <td>{s['email']}</td>
                     <td>{s['event_id']}</td>
+                    <td>{s['event_date']}</td>
                     <td>{s['official_start']}</td>
                     <td>{s['official_end']}</td>
                     <td>{s['checkin_time']}</td>
@@ -1024,7 +1027,7 @@ def submit_event():
         conn.commit()
         conn.close()
         logging.debug("✅ All recurring events committed successfully")
-        return redirect(url_for("events", success=1))
+        return redirect(url_for("dashboard", success=1))
 
     # --- SINGLE EVENT HANDLING ---
     else:
@@ -1232,13 +1235,6 @@ def find_student():
 
     return render_template('find_student.html', students=students)
 
-
-@app.route("/test_email/<int:event_id>")
-def test_send_professor_email(event_id):
-    send_professor_emails(event_id)
-    return f"Triggered professor email manually for event {event_id}"
-
-
 @app.route("/event_info/<int:event_id>")
 @login_required
 def event_info(event_id):
@@ -1261,6 +1257,10 @@ def event_info(event_id):
     else:
         return "Event not found", 404
 
+@app.route("/test_send_email/<int:event_id>")
+def test_send_email(event_id):
+    send_professor_emails(event_id)
+    return "Sent test email."
 
 if __name__ == "__main__":
     reschedule_pending_emails()
