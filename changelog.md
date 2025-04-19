@@ -52,7 +52,7 @@
     - There were a multitude of variables we felt we needed to consider and safeguard against (e.g., late arrival, event ending early) for the system to handle, fully, the attendance verification logic.
 - #### Implications:
     - Simplifies backend logic. Offloads attendance verification responsibility from the system to the professor.
-    - `attendance_status` table is system database is now deprecated.
+    - `attendance_status` table in system database is now deprecated.
 
 ### Improved the student check-in process to support multiple courses and professors.
 - #### Description:
@@ -65,7 +65,7 @@
     - Theoretically reduces network traffic and load on the system. Instead of handling multiple separate POST requests for a student checking in for multiple courses, the system only needs to handle one.
     - Slight adjustments to backend logic. Does not overcomplicate things, though.
 
-## [2025-04-16] – Change Summary
+## [2025-04-20] – Change Summary
 ### Improved the event-creation process to support recurring events.
 - #### Description:
     - Admins/Professor may now create events that repeat on a schedule (e.g, weekly, monthly).
