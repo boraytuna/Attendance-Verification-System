@@ -89,8 +89,7 @@
                     if (
                         year === today.getFullYear() &&
                         month === today.getMonth() &&
-                        day === today.getDate()
-                    ) {
+                        day === today.getDate()) {
                         cell.classList.add("today-highlight");
                     }
 
@@ -121,7 +120,7 @@
                     });
             }
 
-// Modal logic
+            // Modal logic
             const modal = document.getElementById("eventModal");
             const closeButton = document.querySelector(".close-button");
 
@@ -156,7 +155,7 @@
     `}
 
     <div style="margin-top: 20px;">
-        <a class="qr-button-link" href="/qr_code/${event.eventID}" target="_blank">📲 Show QR</a>
+        <a class="qr-button-link" href="/calendar_event_qr/${event.eventID}" target="_blank">📲 Show QR Flyer</a>
     </div>
 `;
 

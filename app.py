@@ -590,7 +590,6 @@ def get_or_create_qr_code(event_id):
 
     return qr_code_path
 
-
 # Route: Serve QR Code
 @app.route("/qr_code/<int:event_id>")
 @login_required
@@ -598,6 +597,29 @@ def serve_qr_code(event_id):
     qr_code_path = get_or_create_qr_code(event_id)
     return send_file(qr_code_path, mimetype="image/png")
 
+@app.route("/calendar_event_qr/<int:event_id>")
+@login_required
+def qr_display(event_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT e.eventName, e.eventDate, e.startTime, e.stopTime, 
+               e.eventDescription,
+               p.name AS placeName, p.building
+        FROM events e
+        JOIN places p ON ROUND(e.latitude, 6) = ROUND(p.latitude, 6) 
+                      AND ROUND(e.longitude, 6) = ROUND(p.longitude, 6)
+        WHERE e.eventID = ?
+    """, (event_id,))
+    event = cursor.fetchone()
+    conn.close()
+
+    if not event:
+        flash("❌ Event not found.", "error")
+        return redirect(url_for("dashboard"))
+
+    return render_template("qr_display.html", event=event, qr_url=url_for("serve_qr_code", event_id=event_id))
 
 # **Route: Student Interface**
 @app.route("/student_checkin/<int:event_id>")

@@ -1,0 +1,118 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<style>
+    .dashboard-container {
+        max-width: 700px;
+        margin: auto;
+        background-color: #ffffff;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+    }
+
+    .flyer-box {
+        background: white;
+        border-radius: 12px;
+        padding: 24px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+
+    .flyer-box h3 {
+        color: #004aad;
+        margin-bottom: 12px;
+        text-align: center;
+    }
+
+    .flyer-box p {
+        margin: 10px 0;
+        font-size: 16px;
+    }
+
+    #qrImage {
+        margin: 0 auto;
+        display: block;
+        width: 200px;
+        height: 200px;
+    }
+
+    .button-row {
+        margin-top: 20px;
+        text-align: center;
+    }
+
+    .btn-blue {
+        background-color: #1d4ed8;
+        color: white;
+        border: none;
+        padding: 10px 16px;
+        border-radius: 5px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+        text-decoration: none;
+        display: inline-block;
+        margin: 5px;
+    }
+
+    .btn-blue:hover {
+        background-color: #1e40af;
+    }
+</style>
+
+<div class="dashboard-container">
+    <div class="flyer-box" id="qrInfoBlock">
+        <h3>📌 {{ event['eventName'] }}</h3>
+
+        <img id="qrImage" src="{{ qr_url }}" alt="QR Code">
+
+        <p><strong>Date:</strong> {{ event['eventDate'] }}</p>
+        <p><strong>Time:</strong> {{ event['startTime'] }} - {{ event['stopTime'] }}</p>
+        <p><strong>Location:</strong> {{ event['placeName'] }} ({{ event['building'] }})</p>
+        <p><strong>Description:</strong> {{ event['eventDescription'] or "No details provided." }}</p>
+    </div>
+
+    <div class="button-row">
+        <button class="btn-blue" onclick="downloadQR()">⬇️ Download QR Only</button>
+        <button class="btn-blue" onclick="downloadWithInfo()">⬇️ Download Full Flyer</button>
+    </div>
+
+    <a href="/calendar" class="btn-blue">🔙 Back to Calendar</a>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script>
+    function sanitizeFileName(name) {
+        return name.replace(/\s+/g, '_').replace(/[^\w\-]/g, '').toLowerCase();
+    }
+
+    function downloadQR() {
+        const qr = document.getElementById("qrImage");
+        const link = document.createElement("a");
+        link.href = qr.src;
+
+        const eventName = "{{ event['eventName'] }}";
+        const safeName = sanitizeFileName(eventName);
+        link.download = safeName + "_qr.png";
+        link.click();
+    }
+
+    function downloadWithInfo() {
+        const block = document.getElementById("qrInfoBlock");
+        const eventName = "{{ event['eventName'] }}";
+        const safeName = sanitizeFileName(eventName);
+
+        html2canvas(block, {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: "#ffffff"
+        }).then(canvas => {
+            const link = document.createElement("a");
+            link.download = safeName + "_flyer.png";
+            link.href = canvas.toDataURL();
+            link.click();
+        });
+    }
+</script>
+{% endblock %}

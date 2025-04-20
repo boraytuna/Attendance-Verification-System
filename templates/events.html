@@ -2,6 +2,27 @@
 {% block content %}
 
     <style>
+
+        select {
+            appearance: none;
+            background-color: #fff;
+            border: 1px solid #0056b3;
+            border-radius: 5px;
+            color: #0056b3;
+            padding: 10px;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 140 140' width='10' height='10' xmlns='http://www.w3.org/2000/svg'%3E%3Cpolyline points='15,55 70,110 125,55' fill='none' stroke='%230056b3' stroke-width='20' stroke-linecap='round'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            background-size: 12px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: #004494;
+        }
+
         body {
             font-family: 'Segoe UI', sans-serif;
             margin: 30px;
@@ -229,6 +250,7 @@
             const isRecurringInput = document.getElementById('is_recurring');
             const recurrenceStartInput = document.getElementById('recurrence_start_date');
             const recurrenceEndInput = document.getElementById('recurrence_end_date');
+            const recurrenceDropdown = document.getElementById("recurrence");
 
             // 🔁 Toggle recurring section
             toggleBtn.addEventListener('click', () => {
@@ -244,6 +266,7 @@
 
                     recurrenceStartInput.required = true;
                     recurrenceEndInput.required = true;
+                    recurrenceDropdown.required = true;
 
                     recurrenceStartInput.disabled = false;
                     recurrenceEndInput.disabled = false;
@@ -259,18 +282,14 @@
                     toggleBtn.style.backgroundColor = "#0056b3";
                     isRecurringInput.value = "false";
 
-                    // 🔄 Full reset of recurring-specific fields
-                    recurrenceStartInput.removeAttribute("required");
-                    recurrenceEndInput.removeAttribute("required");
+                    recurrenceStartInput.required = false;
+                    recurrenceEndInput.required = false;
+                    recurrenceDropdown.required = false;
 
                     recurrenceStartInput.value = "";
                     recurrenceEndInput.value = "";
-
-                    const recurrenceDropdown = document.getElementById("recurrence");
-                    recurrenceDropdown.disabled = false;
                     recurrenceDropdown.value = "none";
 
-                    // 🔒 Disable recurrence fields so they don't get submitted accidentally
                     recurrenceStartInput.disabled = true;
                     recurrenceEndInput.disabled = true;
                     recurrenceDropdown.disabled = true;

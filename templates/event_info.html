@@ -93,6 +93,24 @@
         .dashboard-btn:hover {
             background-color: #0056b3;
         }
+
+        .btn-blue {
+            background-color: #1d4ed8; /* Tailwind blue-700 */
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-blue:hover {
+            background-color: #1e40af; /* Tailwind blue-800 */
+        }
     </style>
 
     <div class="dashboard-container" style="padding: 30px;">
@@ -118,7 +136,14 @@
                 <td>{{ event['stopTime'] }}</td>
                 <td>{{ event['place_name'] ~ ' (' ~ event['building'] ~ ')' if event['place_name'] else event['eventAddress'] }}</td>
                 <td>{{ event['recurrenceType'] if event['isRecurring'] else "—" }}</td>
-                <td><a class="qr-button-link" href="/qr_code/{{ event['eventID'] }}" target="_blank">Show QR</a></td>
+                <td>
+                    <button id="toggleQRBtn"
+                            class="qr-button-link"
+                            style="background-color: #28a745;"
+                            onclick="toggleFlyerBlock()">
+                        Show QR
+                    </button>
+                </td>
             </tr>
             </tbody>
         </table>
@@ -134,6 +159,85 @@
                 <p style="text-align: center; color: #888;">No description provided for this event.</p>
             {% endif %}
         </div>
+
+        <!-- 🔄 QR Toggle Section -->
+        <div id="qrFlyerSection" style="margin-top: 20px; display: none; position: relative; z-index: 10;">
+            <!-- 🪪 Card box (the flyer) -->
+            <div style="background: white; border-radius: 12px; padding: 24px; box-shadow: 0 2px 6px rgba(0,0,0,0.1);">
+                <h3 style="color: #004aad; margin-bottom: 12px;">📌 {{ event['eventName'] }}</h3>
+
+                <img id="qrImage" src="{{ url_for('serve_qr_code', event_id=event['eventID']) }}" alt="QR Code"
+                     style="margin: 0 auto; display: block; width: 200px; height: 200px;">
+
+                <p style="margin-top: 16px;"><strong>Date:</strong> {{ event['eventDate'] }}</p>
+                <p><strong>Time:</strong> {{ event['startTime'] }} - {{ event['stopTime'] }}</p>
+                <p><strong>Location:</strong>
+                    {{ event['place_name'] ~ ' (' ~ event['building'] ~ ')' if event['place_name'] else event['eventAddress'] }}
+                </p>
+                <p><strong>Description:</strong> {{ event['eventDescription'] }}</p>
+            </div>
+
+            <!-- ⬇️ Download buttons -->
+            <div style="margin-top: 20px;">
+                <button onclick="downloadQRCodeOnly()" class="btn-blue" style="margin-right: 10px;">
+                    ⬇️ Download QR Only
+                </button>
+                <button onclick="downloadFlyer()" class="btn-blue">
+                    ⬇️ Download Full Flyer
+                </button>
+            </div>
+        </div>
+
+        <!-- html2canvas for full flyer -->
+        <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+        <script>
+            function sanitizeFileName(name) {
+                return name.replace(/\s+/g, '_').replace(/[^\w\-]/g, '').toLowerCase();
+            }
+
+            function toggleFlyerBlock() {
+                const section = document.getElementById("qrFlyerSection");
+                const btn = document.getElementById("toggleQRBtn");
+
+                const isHidden = section.style.display === "none" || section.style.display === "";
+
+                section.style.display = isHidden ? "block" : "none";
+                btn.textContent = isHidden ? "Hide QR" : "Show QR";
+                btn.style.backgroundColor = isHidden ? "#dc3545" : "#28a745"; // red / green
+            }
+
+            function downloadFlyer() {
+                const flyerCard = document.querySelector("#qrFlyerSection > div:first-child");
+                const eventName = "{{ event['eventName'] }}";
+                const safeName = sanitizeFileName(eventName);
+
+                html2canvas(flyerCard, {
+                    scale: 2,
+                    useCORS: true,
+                    backgroundColor: "#ffffff"
+                }).then(canvas => {
+                    const link = document.createElement("a");
+                    link.download = safeName + "_flyer.png";
+                    link.href = canvas.toDataURL();
+                    link.click();
+                });
+            }
+
+            function downloadQRCodeOnly() {
+                const qr = document.getElementById("qrImage");
+                const eventName = "{{ event['eventName'] }}";
+                const safeName = sanitizeFileName(eventName);
+
+                const link = document.createElement("a");
+                link.href = qr.src;
+                link.download = safeName + "_qr.png";
+                link.click();
+            }
+
+            document.addEventListener("DOMContentLoaded", () => {
+                document.getElementById("qrFlyerSection").style.display = "none";
+            });
+        </script>
 
 
         {% set event_start_str = event['eventDate'] ~ ' ' ~ event['startTime'] %}
