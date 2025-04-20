@@ -168,10 +168,18 @@
                         style="background: none; border: none; font-weight: bold; cursor: pointer; color: #155724;">✖
                 </button>
             </div>
+        {% elif request.args.get('recurring_created') == '1' %}
+            <div class="flash-message"
+                 style="background-color: #d4edda; color: #155724; padding: 12px; border: 1px solid #c3e6cb; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+                🔁 Recurring event created successfully!
+                <button onclick="this.parentElement.style.display='none'"
+                        style="background: none; border: none; font-weight: bold; cursor: pointer; color: #155724;">✖
+                </button>
+            </div>
         {% elif request.args.get('edited') == '1' %}
             <div class="flash-message"
                  style="background-color: #d4edda; color: #155724; padding: 12px; border: 1px solid #c3e6cb; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
-                ✅ Event updated successfully!
+                ✏️ Event updated successfully!
                 <button onclick="this.parentElement.style.display='none'"
                         style="background: none; border: none; font-weight: bold; cursor: pointer; color: #155724;">✖
                 </button>
@@ -179,7 +187,7 @@
         {% elif request.args.get('deleted') == '1' %}
             <div class="flash-message"
                  style="background-color: #d4edda; color: #155724; padding: 12px; border: 1px solid #c3e6cb; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
-                ✅ Event deleted successfully!
+                🗑️ Event deleted successfully!
                 <button onclick="this.parentElement.style.display='none'"
                         style="background: none; border: none; font-weight: bold; cursor: pointer; color: #155724;">✖
                 </button>
@@ -187,7 +195,7 @@
         {% elif request.args.get('place_created') == '1' %}
             <div class="flash-message"
                  style="background-color: #d4edda; color: #155724; padding: 12px; border: 1px solid #c3e6cb; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
-                ✅ New place created successfully!
+                🏢 New place created successfully!
                 <button onclick="this.parentElement.style.display='none'"
                         style="background: none; border: none; font-weight: bold; cursor: pointer; color: #155724;">✖
                 </button>
