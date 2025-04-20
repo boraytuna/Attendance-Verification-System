@@ -1,153 +1,321 @@
+{% set suppress_flash = true %}
 {% extends 'base.html' %}
 {% block content %}
 
-<style>
-    body {
-        font-family: 'Segoe UI', sans-serif;
-        margin: 30px;
-        background-color: #f5f6f7;
-        color: #333;
-    }
-    
-    .account-container {
-        max-width: 600px;
-        margin: 40px auto;
-        background-color: #ffffff;
-        padding: 30px;
-        border-radius: 10px;
-        box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
-    }
-
-    h1 {
-        text-align: center;
-        color: #0056b3;
-        margin-bottom: 20px;
-    }
-
-    label {
-        font-weight: bold;
-        display: block;
-        margin-top: 15px;
-    }
-
-    input {
-        padding: 10px;
-        width: 100%;
-        margin-top: 5px;
-        margin-bottom: 15px;
-        border: 1px solid #ccc;
-        border-radius: 5px;
-        box-sizing: border-box;
-    }
-
-    .password-wrapper {
-        position: relative;
-    }
-
-    .password-wrapper button {
-        position: absolute;
-        right: 10px;
-        top: 50%;
-        transform: translateY(-50%);
-        background: none;
-        border: none;
-        font-size: 14px;
-        cursor: pointer;
-    }
-
-    button[type="submit"] {
-        background-color: #0056b3;
-        color: white;
-        padding: 10px 20px;
-        width: 100%;
-        border: none;
-        border-radius: 5px;
-        font-size: 16px;
-        cursor: pointer;
-        transition: background-color 0.3s ease;
-    }
-
-    button[type="submit"]:hover {
-        background-color: #004494;
-    }
-
-    .message {
-        background-color: #d4edda;
-        color: #155724;
-        padding: 10px;
-        border: 1px solid #c3e6cb;
-        border-radius: 5px;
-        text-align: center;
-        margin-bottom: 20px;
-    }
-
-    .error {
-        color: red;
-        font-size: 14px;
-        margin-top: -10px;
-        margin-bottom: 10px;
-    }
-</style>
-
-<div class="account-container">
-    <h1>👤 Account Settings</h1>
-
-    {% with messages = get_flashed_messages() %}
-      {% if messages %}
-        <div class="message">
-            {{ messages[0] }}
-        </div>
-      {% endif %}
-    {% endwith %}
-
-    <form method="POST" onsubmit="return validatePasswords()">
-    <label>First Name:</label>
-    <input type="text" value="{{ user['first_name'] }}" readonly>
-
-    <label>Last Name:</label>
-    <input type="text" value="{{ user['last_name'] }}" readonly>
-
-    <label>Email:</label>
-    <input type="email" value="{{ user['email'] }}" readonly>
-
-        <label for="password">New Password:</label>
-        <div class="password-wrapper">
-            <input type="password" name="password" id="password" placeholder="Enter new password" required>
-            <button type="button" onclick="togglePassword('password')">👁️</button>
-        </div>
-
-        <label for="confirm_password">Confirm New Password:</label>
-        <div class="password-wrapper">
-            <input type="password" name="confirm_password" id="confirm_password" placeholder="Confirm new password" required>
-            <button type="button" onclick="togglePassword('confirm_password')">👁️</button>
-        </div>
-
-        <p class="error" id="password_error" style="display: none;"></p>
-
-        <button type="submit">Update Password</button>
-    </form>
-</div>
-
-<script>
-    function togglePassword(fieldId) {
-        const field = document.getElementById(fieldId);
-        field.type = field.type === "password" ? "text" : "password";
-    }
-
-    function validatePasswords() {
-        const password = document.getElementById("password").value;
-        const confirm = document.getElementById("confirm_password").value;
-        const errorText = document.getElementById("password_error");
-
-        if (password !== confirm) {
-            errorText.textContent = "❌ Passwords do not match.";
-            errorText.style.display = "block";
-            return false;
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            margin: 30px;
+            background-color: #f5f6f7;
+            color: #333;
         }
 
-        errorText.style.display = "none";
-        return true;
-    }
-</script>
+        .account-container {
+            max-width: 600px;
+            margin: 40px auto;
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #0056b3;
+            margin-bottom: 20px;
+        }
+
+        label {
+            font-weight: bold;
+            display: block;
+            margin-top: 15px;
+        }
+
+        input {
+            padding: 10px;
+            width: 100%;
+            margin-top: 5px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+
+        .password-wrapper {
+            position: relative;
+        }
+
+        .password-wrapper button {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        button[type="submit"] {
+            background-color: #0056b3;
+            color: white;
+            padding: 10px 20px;
+            width: 100%;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        button[type="submit"]:hover {
+            background-color: #004494;
+        }
+
+        .message {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 10px;
+            border: 1px solid #c3e6cb;
+            border-radius: 5px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .error {
+            color: red;
+            font-size: 14px;
+            margin-top: -10px;
+            margin-bottom: 10px;
+        }
+
+        .primary-btn {
+            background-color: #0056b3;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            margin: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .primary-btn:hover {
+            background-color: #004494;
+        }
+
+        .danger-btn {
+            background-color: #dc3545;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            margin: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .danger-btn:hover {
+            background-color: #c82333;
+        }
+    </style>
+
+    <div class="account-container">
+        <h1>👤 Account Settings</h1>
+
+        {% set flashed_messages = get_flashed_messages(with_categories=true) %}
+        {% if flashed_messages %}
+            {% for category, message in flashed_messages %}
+                <div class="flash-message {{ category }}">
+                    {{ message }}
+                    <button class="close-btn" onclick="this.parentElement.style.display='none';">×</button>
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <form method="POST" onsubmit="return validateForm()">
+            <label>First Name:</label>
+            <input type="text" name="first_name" id="first_name" value="{{ user['first_name'] }}" readonly>
+
+            <label>Last Name:</label>
+            <input type="text" name="last_name" id="last_name" value="{{ user['last_name'] }}" readonly>
+
+            <label>Email:</label>
+            <input type="email" name="email" id="email" value="{{ user['email'] }}" readonly>
+
+            <!-- Non-editable Password Display -->
+            <div id="viewPasswordSection">
+                <label for="old_password">Password:</label>
+                <input type="password" id="old_password" value="********" readonly>
+            </div>
+
+            <!-- Editable New Password Section (Hidden by default) -->
+            <div id="editPasswordSection" style="display: none;">
+                <label for="password">New Password:</label>
+                <div class="password-wrapper">
+                    <input type="password" name="password" id="password" placeholder="Enter new password">
+                    <button type="button" onclick="togglePassword('password')">👁️</button>
+                </div>
+
+                <label for="confirm_password">Confirm New Password:</label>
+                <div class="password-wrapper">
+                    <input type="password" name="confirm_password" id="confirm_password"
+                           placeholder="Confirm new password">
+                    <button type="button" onclick="togglePassword('confirm_password')">👁️</button>
+                </div>
+            </div>
+
+            <p class="error" id="form_error" style="display: none;"></p>
+
+            <div style="text-align: center; margin-top: 20px;">
+                <button type="submit" id="saveBtn" class="primary-btn" style="display: none;">💾 Save Changes</button>
+                <button type="button" onclick="toggleEdit()" id="editBtn" class="primary-btn">✏️ Edit Info</button>
+                <button type="button" onclick="toggleEdit()" id="cancelBtn" class="danger-btn" style="display: none;">❌
+                    Cancel
+                </button>
+            </div>
+        </form>
+
+        <div id="logoutConfirmModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+     background-color: rgba(0, 0, 0, 0.5); z-index: 1000; align-items: center; justify-content: center;">
+            <div style="background-color: white; padding: 25px 30px; border-radius: 10px; max-width: 400px; width: 90%; box-shadow: 0 0 20px rgba(0, 0, 0, 0.3); text-align: center;">
+                <p style="margin-bottom: 25px;">⚠️ Changing your email or password will log you out.<br>This cannot be
+                    undone. Do you wish to continue?</p>
+                <button id="cancelLogoutBtn" class="danger-btn" style="margin-right: 10px;">Cancel</button>
+                <button id="confirmLogoutBtn" class="primary-btn">Continue</button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        function togglePassword(fieldId) {
+            const field = document.getElementById(fieldId);
+            field.type = field.type === "password" ? "text" : "password";
+        }
+
+        let originalValues = {};
+
+        function toggleEdit() {
+            const isEditing = document.getElementById("first_name").readOnly === false;
+
+            if (isEditing) {
+                // 🔙 Cancel was clicked — reset values
+                document.getElementById("first_name").value = originalValues.first_name;
+                document.getElementById("last_name").value = originalValues.last_name;
+                document.getElementById("email").value = originalValues.email;
+
+                // Hide password fields too
+                document.getElementById("password").value = "";
+                document.getElementById("confirm_password").value = "";
+            } else {
+                // ✍️ Entering edit mode — save current values
+                originalValues.first_name = document.getElementById("first_name").value;
+                originalValues.last_name = document.getElementById("last_name").value;
+                originalValues.email = document.getElementById("email").value;
+            }
+
+            // Toggle inputs
+            ["first_name", "last_name", "email"].forEach(id => {
+                document.getElementById(id).readOnly = isEditing;
+            });
+
+            // Toggle password section
+            document.getElementById("viewPasswordSection").style.display = isEditing ? "block" : "none";
+            document.getElementById("editPasswordSection").style.display = isEditing ? "none" : "block";
+
+            // Toggle buttons
+            document.getElementById("editBtn").style.display = isEditing ? "inline-block" : "none";
+            document.getElementById("cancelBtn").style.display = isEditing ? "none" : "inline-block";
+            document.getElementById("saveBtn").style.display = isEditing ? "none" : "inline-block";
+
+            // Clear errors
+            document.getElementById("form_error").style.display = "none";
+        }
+
+        let formPendingSubmission = false;
+
+        function validateForm() {
+            const first = document.getElementById("first_name").value.trim();
+            const last = document.getElementById("last_name").value.trim();
+            const email = document.getElementById("email").value.trim();
+            const password = document.getElementById("password").value;
+            const confirm = document.getElementById("confirm_password").value;
+            const errorText = document.getElementById("form_error");
+
+            if (!first || !last || !email) {
+                errorText.textContent = "❌ All fields must be filled.";
+                errorText.style.display = "block";
+                return false;
+            }
+
+            if (password || confirm) {
+                if (password !== confirm) {
+                    errorText.textContent = "❌ Passwords do not match.";
+                    errorText.style.display = "block";
+                    return false;
+                }
+            }
+
+            const emailChanged = email !== originalEmail;
+            const passwordChanged = password.length > 0;
+
+            if (emailChanged || passwordChanged) {
+                // show modal and prevent default submit
+                document.getElementById("logoutConfirmModal").style.display = "flex";
+                formPendingSubmission = true;
+                return false;
+            }
+
+            errorText.style.display = "none";
+            return true;
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            // Hook up modal buttons
+            document.getElementById("cancelLogoutBtn").addEventListener("click", () => {
+                document.getElementById("logoutConfirmModal").style.display = "none";
+                formPendingSubmission = false;
+            });
+
+            document.getElementById("confirmLogoutBtn").addEventListener("click", () => {
+                if (formPendingSubmission) {
+                    document.querySelector("form").submit();
+                }
+            });
+
+            // set originalEmail AFTER DOM loads
+            originalEmail = document.getElementById("email").value;
+        });
+
+        // Auto-hide flash message after 3 seconds
+        window.onload = function () {
+            const msg = document.querySelector('.message');
+            if (msg) {
+                setTimeout(() => {
+                    msg.style.transition = "opacity 0.5s ease";
+                    msg.style.opacity = 0;
+                    setTimeout(() => msg.style.display = 'none', 500);
+                }, 3000);
+            }
+        };
+
+        let originalEmail;
+
+        window.onload = function () {
+            originalEmail = document.getElementById("email").value;
+
+            const msg = document.querySelector('.message');
+            if (msg) {
+                setTimeout(() => {
+                    msg.style.transition = "opacity 0.5s ease";
+                    msg.style.opacity = 0;
+                    setTimeout(() => msg.style.display = 'none', 500);
+                }, 3000);
+            }
+        };
+    </script>
 
 {% endblock %}

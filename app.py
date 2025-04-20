@@ -523,29 +523,52 @@ def account():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # fetch full user info
+    # Get full user info
     cursor.execute("""
         SELECT first_name, last_name, email, password FROM users WHERE email = ?
     """, (session['user_email'],))
     user = cursor.fetchone()
 
     if request.method == 'POST':
-        new_password = request.form.get('password')
-        confirm_password = request.form.get('confirm_password')
+        # 🧠 Grab form data
+        new_first = request.form.get('first_name').strip()
+        new_last = request.form.get('last_name').strip()
+        new_email = request.form.get('email').strip()
+        new_password = request.form.get('password', '').strip()
+        confirm_password = request.form.get('confirm_password', '').strip()
 
-        if new_password != confirm_password:
-            flash("❌ Passwords do not match.")
-        else:
-            encrypted = sha256_crypt.hash(new_password)
+        if not new_first or not new_last or not new_email:
+            flash("❌ First name, last name, and email cannot be empty.")
+            return redirect(url_for('account'))
+
+        # 🔐 If password is being changed, validate and hash
+        if new_password or confirm_password:
+            if new_password != confirm_password:
+                flash("❌ Passwords do not match.")
+                return redirect(url_for('account'))
+            hashed_password = sha256_crypt.hash(new_password)
             cursor.execute("""
-                UPDATE users SET password = ? WHERE email = ?
-            """, (encrypted, session['user_email']))
-            conn.commit()
-            conn.close()
+                UPDATE users SET first_name = ?, last_name = ?, email = ?, password = ? WHERE email = ?
+            """, (new_first, new_last, new_email, hashed_password, session['user_email']))
+        else:
+            # 📝 Only update name/email
+            cursor.execute("""
+                UPDATE users SET first_name = ?, last_name = ?, email = ? WHERE email = ?
+            """, (new_first, new_last, new_email, session['user_email']))
 
-            flash("✅ Password updated successfully. Please log in again.")
-            session.clear()  # force logout
+        conn.commit()
+        conn.close()
+
+        # 🧼 Force re-login ONLY if email or password changed
+        if new_email != session['user_email'] or new_password:
+            flash("✅ Info updated. Please log in again.")
+            session.clear()
             return redirect(url_for('login'))
+
+        # 🔁 If only name changed, no logout needed
+        flash("✅ Account info updated!")
+        session['user_email'] = new_email  # update session if email changed
+        return redirect(url_for('account'))
 
     conn.close()
     return render_template('account.html', user=user)
@@ -1201,7 +1224,7 @@ def submit_event():
         conn.commit()
         conn.close()
         logging.debug("✅ All recurring events committed successfully")
-        return redirect(url_for("dashboard", success=1))
+        return redirect(url_for("dashboard", recurring_created=1))
 
     # --- SINGLE EVENT HANDLING ---
     else:
@@ -1270,7 +1293,7 @@ def submit_event():
             logging.error(f"[SCHEDULER ERROR] Could not schedule email: {e}")
 
         print("✅ Reached submit_event(), is_recurring:", is_recurring)
-        return redirect(url_for("dashboard", success=1))
+        return redirect(url_for("dashboard", created=1))
 
 
 # Route: API endpoint for event list (returns JSON)

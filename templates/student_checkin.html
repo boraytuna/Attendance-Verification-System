@@ -27,6 +27,24 @@
 <!-- Frame 1: Student Info -->
 <section id="frame1" style="display: block;">
     <div class="content">
+
+        <div id="browserWarning" class="browser-warning"
+             style="background-color: #fff3cd; color: #856404; padding: 16px 20px; border: 1px solid #ffeeba;
+            border-radius: 10px; margin: 16px auto; font-size: 14px; text-align: center; max-width: 600px;">
+
+            ⚠️ <strong>Performance may vary depending on your browser.</strong><br>
+            For the best experience, we recommend using <strong>Google Chrome</strong>.
+
+            <!-- ✅ Dismiss button below the message -->
+            <div style="margin-top: 12px;">
+                <button onclick="document.getElementById('browserWarning').style.display='none'"
+                        style="background-color: #856404; color: white; border: none; padding: 8px 14px;
+                       border-radius: 5px; cursor: pointer; font-size: 14px;">
+                    Got it
+                </button>
+            </div>
+        </div>
+
         <h1>Student Attendance Form</h1>
         <h2>{{ eventName | default("Event Not Found") }}</h2>
         <form>

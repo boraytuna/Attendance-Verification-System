@@ -161,16 +161,18 @@
                         </td>
                     </tr>
 
-                    <!-- CREATE NEW PLACE BUTTON -->
+                    <!-- CREATE NEW PLACE BUTTON + WARNING -->
                     <tr>
                         <td colspan="2">
-                            <div style="margin-top: 5px; font-size: 14px;">
-                                Couldn't find the place you are looking for?
+                            <div style="margin-top: 20px; padding: 15px; background-color: #fff3cd; border: 1px solid #ffeeba; border-radius: 8px; text-align: center; font-size: 14px; color: #856404;">
+                                ⚠️ Creating a new place will cause all current changes to be lost.
                             </div>
-                            <div style="margin-top: 5px; font-size: 14px;">
-                                ⚠️ Choosing Create New Place will cause changes to be lost.
+
+                            <div style="text-align: center; margin-top: 10px;">
+                                <button type="button" onclick="window.location.href='/places'"
+                                        style="width: auto; padding: 10px 16px;">➕ Create New Place
+                                </button>
                             </div>
-                            <button type="button" onclick="window.location.href='/places'">➕ Create New Place</button>
                         </td>
                     </tr>
 
@@ -257,7 +259,7 @@
                     toggleBtn.style.backgroundColor = "#0056b3";
                     isRecurringInput.value = "false";
 
-// 🔄 Full reset of recurring-specific fields
+                    // 🔄 Full reset of recurring-specific fields
                     recurrenceStartInput.removeAttribute("required");
                     recurrenceEndInput.removeAttribute("required");
 
@@ -265,9 +267,10 @@
                     recurrenceEndInput.value = "";
 
                     const recurrenceDropdown = document.getElementById("recurrence");
+                    recurrenceDropdown.disabled = false;
                     recurrenceDropdown.value = "none";
 
-// 🔒 Disable recurrence fields so they don't get submitted accidentally
+                    // 🔒 Disable recurrence fields so they don't get submitted accidentally
                     recurrenceStartInput.disabled = true;
                     recurrenceEndInput.disabled = true;
                     recurrenceDropdown.disabled = true;
