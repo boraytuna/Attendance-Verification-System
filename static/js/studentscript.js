@@ -1,5 +1,4 @@
 document.addEventListener("DOMContentLoaded", function () {
-    let currentFrameIndex = 0;
     const allFrames = document.getElementsByTagName("section");
     const table = document.getElementById("tableBody");
     const userAgreement = document.getElementById("userAgreement");
@@ -18,13 +17,26 @@ document.addEventListener("DOMContentLoaded", function () {
     let frameState = sessionStorage.getItem("frameState");
     let emailVerified = sessionStorage.getItem("emailVerified") === "true";
 
-    // Logic for deciding which frame to show
-    if (frameState === "4") {
-        showFrame(3); // Frame 4 is index 3
-    } else if (frameState === "3" && emailVerified) {
-        showFrame(2); // Frame 3 is index 2
+    // 👇 Enhanced frame logic — supports Frame 2 restoration
+    let resendStarted = sessionStorage.getItem("resendTimerStarted") === "true";
+    let resendStartTime = parseInt(sessionStorage.getItem("resendStartTime") || "0", 10);
+    let elapsed = Math.floor((Date.now() - resendStartTime) / 1000);
+    let remaining = 180 - elapsed;
+
+    if (frameState === "1" && resendStarted && remaining > 0) {
+        showFrame(1); // Frame 2
+        emailNotice.style.display = "block";
+        startResendCountdown(remaining);
+    } else if (frameState === "2" && emailVerified) {
+        showFrame(2); // Frame 3
+    } else if (frameState === "3") {
+        showFrame(3); // Frame 4
+    } else if (frameState === "4") {
+        showFrame(4); // Frame 5
+    } else if (frameState === "5") {
+        showFrame(5); // Frame 6
     } else {
-        showFrame(0); // Everything else redirects to Frame 1
+        showFrame(0); // Frame 1
     }
 
 
@@ -42,18 +54,10 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     }
 
-
-    window.addEventListener("beforeunload", () => {
-        if (currentFrameIndex >= 2) {
-            sessionStorage.setItem("currentFrame", currentFrameIndex.toString());
-        }
-    });
-
     function showFrame(frameIndex) {
         for (let i = 0; i < allFrames.length; i++) {
             allFrames[i].style.display = i === frameIndex ? "block" : "none";
         }
-        currentFrameIndex = frameIndex;
 
         restoreFormData(); // ✅ Always restore
     }
@@ -118,6 +122,28 @@ document.addEventListener("DOMContentLoaded", function () {
                 table.appendChild(newRow);
             });
         }
+    }
+
+    function startResendCountdown(seconds) {
+        resendBtn.disabled = true;
+        let remaining = seconds;
+
+        // 🔐 Save the start time and flag for refresh persistence
+        sessionStorage.setItem("resendTimerStarted", "true");
+        sessionStorage.setItem("resendStartTime", Date.now().toString());
+
+        const interval = setInterval(() => {
+            const mins = Math.floor(remaining / 60);
+            const secs = remaining % 60;
+            timerSpan.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+            remaining--;
+
+            if (remaining < 0) {
+                clearInterval(interval);
+                resendBtn.disabled = false;
+                timerSpan.textContent = "Ready to resend.";
+            }
+        }, 1000);
     }
 
     function handleGeolocationError(error) {
@@ -231,8 +257,8 @@ document.addEventListener("DOMContentLoaded", function () {
                     alert("Check-in successful!");
                     sessionStorage.setItem("cachedStudent", JSON.stringify(cachedStudent));
                     document.getElementById("errorMessage").style.display = "none";
-                    showFrame(3);
-                    sessionStorage.setItem("frameState", 3);
+                    sessionStorage.setItem("frameState", "3"); // ✅ Frame 4
+                    showFrame(3); // ✅ Frame 4 (the “wait until end” screen)
                 } else {
                     const reason = data.message || "Check-in failed. Please try again.";
                     showError(reason);
@@ -284,9 +310,8 @@ document.addEventListener("DOMContentLoaded", function () {
             .then(data => {
                 if (data.status === "success") {
                     alert("End location submitted successfully!");
-                    sessionStorage.setItem("frameState", "4");
-                    showFrame(4); // maybe final frame
-                    sessionStorage.setItem("frameState", 4);
+                    sessionStorage.setItem("frameState", "4"); // ✅ Now saves Frame 5
+                    showFrame(4); // ✅ Loads Frame 5 on success
                 } else {
                     showError(data.message || "Submission failed.");
                 }
@@ -416,26 +441,10 @@ document.addEventListener("DOMContentLoaded", function () {
             })
                 .then(response => response.text())
                 .then(() => {
+                    sessionStorage.setItem("resendTimerStarted", "true");
+                    sessionStorage.setItem("resendStartTime", Date.now().toString());
                     showFrame(1);
                     sessionStorage.setItem("frameState", 1);
-
-                    function startResendCountdown(seconds) {
-                        resendBtn.disabled = true;
-                        let remaining = seconds;
-
-                        const interval = setInterval(() => {
-                            const mins = Math.floor(remaining / 60);
-                            const secs = remaining % 60;
-                            timerSpan.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
-                            remaining--;
-
-                            if (remaining < 0) {
-                                clearInterval(interval);
-                                resendBtn.disabled = false;
-                                timerSpan.textContent = "Ready to resend.";
-                            }
-                        }, 1000);
-                    }
 
                     resendBtn.addEventListener("click", () => {
                         fetch("/resend_verification_email", {
@@ -489,12 +498,11 @@ document.addEventListener("DOMContentLoaded", function () {
                 if (data.message === 'Code verified') {
                     alert(data.message);
                     sessionStorage.setItem("emailVerified", "true");
-                    sessionStorage.setItem("frameState", "3"); // Frame 3 = index 2
-                    showFrame(2); // Frame 3
+                    sessionStorage.setItem("frameState", "2"); // ✅ Save it correctly as Frame 3
+                    showFrame(2); // still shows Frame 3
                 } else {
                     alert(data.error);
                     sessionStorage.removeItem("studentFormData");
-                    sessionStorage.removeItem("currentFrame");
 
                     document.getElementById("studentEmail").value = "";
                     document.getElementById("lastName").value = "";
@@ -548,6 +556,13 @@ document.addEventListener("DOMContentLoaded", function () {
             );
         } else {
             alert("Geolocation not supported by this browser.");
+        }
+    });
+
+    document.getElementById("securityCode").addEventListener("keydown", function (e) {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            document.getElementById("btnSubmitFrame2").click();
         }
     });
 
