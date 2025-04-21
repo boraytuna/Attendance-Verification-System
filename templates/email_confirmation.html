@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+{% block content %}
+
+    {% if grouped_by_prof %}
+        <h1 style="text-align:center; color:#28a745;">✅ Confirmation Email Sent</h1>
+        <p style="text-align:center;">Here’s a breakdown of which students picked which professors for Event ID {{ event_id }}:</p>
+
+        {% for professor, students in grouped_by_prof.items() %}
+            <h2 style="color:#0056b3; margin-top: 30px;">Professor: {{ professor }}</h2>
+            <table style="width: 100%; border-collapse: collapse; table-layout: fixed; font-family: 'Segoe UI', sans-serif; margin-bottom: 30px;">
+                <thead>
+                    <tr style="background-color: #0056b3; color: white;">
+                        <th style="padding: 12px; width: 33.33%; border: 1px solid #ccc; text-align: left;">Student Name</th>
+                        <th style="padding: 12px; width: 33.33%; border: 1px solid #ccc; text-align: left;">Email</th>
+                        <th style="padding: 12px; width: 33.33%; border: 1px solid #ccc; text-align: left;">Class</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for student in students %}
+                        <tr>
+                            <td style="padding: 12px; border: 1px solid #ccc; text-align: left;">{{ student.name }}</td>
+                            <td style="padding: 12px; border: 1px solid #ccc; text-align: left;">{{ student.email }}</td>
+                            <td style="padding: 12px; border: 1px solid #ccc; text-align: left;">{{ student.class }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endfor %}
+
+        {% if show_resend_button %}
+            <div style="text-align:center; margin-top: 20px;">
+                <form action="/force_resend_email/{{ event_id }}" method="post">
+                    <button style="cursor: pointer; padding: 10px 20px; background-color: #dc3545; color: white; border: none; border-radius: 5px;">
+                        🔁 Resend Email Anyway
+                    </button>
+                </form>
+            </div>
+        {% endif %}
+
+    {% else %}
+        <h1 style="text-align:center; color:#dc3545;">⚠️ No Check-In Data Found</h1>
+        <p style="text-align:center; font-size: 18px; color: #555;">No students have checked in for this event. Therefore, the email summary was not sent.</p>
+    {% endif %}
+
+    <div style="text-align:center; margin-top: 30px;">
+        <a href="/events">
+            <button style="cursor: pointer; padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 5px;">
+                🔙 Back to Events
+            </button>
+        </a>
+    </div>
+
+{% endblock %}

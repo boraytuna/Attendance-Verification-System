@@ -7,9 +7,8 @@ import segno
 import random
 import math
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from geopy.distance import geodesic
-from apscheduler.schedulers.background import BackgroundScheduler
 import passlib, passlib.hash
 from passlib.hash import sha256_crypt
 from functools import wraps
@@ -25,11 +24,6 @@ QR_CODE_FOLDER = "qr_codes"
 
 # session key
 app.secret_key = os.urandom(24)
-
-# scheduler for scheduling professor attendance emails
-scheduler = BackgroundScheduler()
-if not scheduler.running:
-    scheduler.start()
 
 ENFORCE_DEVICE_ID = True  # Can toggle off for testing or relaxed events
 
@@ -291,6 +285,7 @@ def submit_logout():
     # redirect to the landing page
     return redirect(url_for("landing_page"))
 
+
 @app.route("/api/dashboard_data")
 @login_required
 def get_dashboard_data():
@@ -340,6 +335,7 @@ def get_dashboard_data():
         "past_events": past, "past_total": past_total,
         "per_page": per_page
     })
+
 
 @app.route("/dashboard")
 @login_required
@@ -405,20 +401,24 @@ def dashboard():
                            upcoming_page=upcoming_page,
                            past_page=past_page)
 
+
 @app.route("/dashboard_partial/current")
 @login_required
 def dashboard_current_partial():
     return render_partial_events("current")
+
 
 @app.route("/dashboard_partial/upcoming")
 @login_required
 def dashboard_upcoming_partial():
     return render_partial_events("upcoming")
 
+
 @app.route("/dashboard_partial/past")
 @login_required
 def dashboard_past_partial():
     return render_partial_events("past")
+
 
 def render_partial_events(section):
     user_id = session["user_id"]
@@ -469,7 +469,8 @@ def render_partial_events(section):
         {% from 'macros.html' import render_table %}
         {{ render_table(events, section_name, page_var, total, per_page, current_page) }}
     """, events=paginated, section_name=section_name, page_var=page_var,
-       total=len(all_rows), per_page=per_page, current_page=page)
+                                  total=len(all_rows), per_page=per_page, current_page=page)
+
 
 @app.route("/events")
 @login_required
@@ -590,12 +591,14 @@ def get_or_create_qr_code(event_id):
 
     return qr_code_path
 
+
 # Route: Serve QR Code
 @app.route("/qr_code/<int:event_id>")
 @login_required
 def serve_qr_code(event_id):
     qr_code_path = get_or_create_qr_code(event_id)
     return send_file(qr_code_path, mimetype="image/png")
+
 
 @app.route("/calendar_event_qr/<int:event_id>")
 @login_required
@@ -620,6 +623,7 @@ def qr_display(event_id):
         return redirect(url_for("dashboard"))
 
     return render_template("qr_display.html", event=event, qr_url=url_for("serve_qr_code", event_id=event_id))
+
 
 # **Route: Student Interface**
 @app.route("/student_checkin/<int:event_id>")
@@ -662,6 +666,7 @@ def send_email():
         return 'Sent', 200
     except Exception as e:
         return str(e), 500
+
 
 @app.route('/resend_verification_email', methods=['POST'])
 def resend_email():
@@ -816,24 +821,6 @@ def submit_student_checkin():
                 firstName, lastName, email, className,
                 professorName, scannedEventID, studentLocation, deviceId
             ))
-
-            # Get inserted time
-            cursor.execute('''
-                SELECT checkinID, checkinTime FROM student_checkins
-                WHERE email = ? AND scannedEventID = ? AND lastName = ?
-                  AND classForExtraCredit = ? AND professorForExtraCredit = ?
-                ORDER BY checkinTime DESC LIMIT 1
-            ''', (email, scannedEventID, lastName, className, professorName))
-            result = cursor.fetchone()
-
-            if result:
-                checkin_time = datetime.strptime(result["checkinTime"], "%Y-%m-%d %H:%M:%S")
-                status = "Attended Late" if checkin_time > late_cutoff else "Attended"
-                responses.append({
-                    "class": className,
-                    "professor": professorName,
-                    "status": status
-                })
         conn.commit()
         conn.close()
 
@@ -843,6 +830,7 @@ def submit_student_checkin():
         import traceback
         print("🔥 Exception in /submit_student_checkin:", traceback.format_exc())
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
 
 @app.route('/submit_end_location', methods=['POST'])
 def submit_end_location():
@@ -889,7 +877,6 @@ def submit_end_location():
         conn.close()
 
 
-
 # **Functions for Generating and Sending Emails to Professors Post-Event**
 def haversine_distance(lat1, lon1, lat2, lon2):
     R = 6371000  # Radius of Earth in meters
@@ -902,219 +889,229 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
 
+def evaluate_student_location(event_lat, event_lon, start_loc, end_loc):
+    def parse(loc):
+        try:
+            lat_str, lon_str = loc.split(",")
+            return float(lat_str), float(lon_str)
+        except Exception:
+            return None, None
 
-def parse_location(location_str):
-    try:
-        lat_str, lon_str = location_str.split(",")
-        return float(lat_str.strip()), float(lon_str.strip())
-    except Exception:
-        return None, None
+    start_lat, start_lon = parse(start_loc)
+    end_lat, end_lon = parse(end_loc)
 
+    def in_range(lat, lon):
+        if lat is None or lon is None:
+            return False
+        return haversine_distance(event_lat, event_lon, lat, lon) <= 100
 
-def construct_email_records(event_id):
-    """
-    Return a dictionary of professors mapped to students who checked in/out
-    within 100 meters of the event location.
-    """
-    conn = get_db_connection()
+    checkin_in_range = in_range(start_lat, start_lon)
+    checkout_in_range = in_range(end_lat, end_lon)
 
-    # Fetch event info
-    event = conn.execute('''
-        SELECT eventName, eventDate, startTime, stopTime, latitude, longitude
-        FROM events
-        WHERE eventID = ?
-    ''', (event_id,)).fetchone()
-
-    if not event:
-        conn.close()
-        return {}
-
-    event_name, event_date, start_time, stop_time, event_lat, event_lon = event
-
-    # Get student data
-    results = conn.execute('''
-        SELECT 
-            sc.firstName, sc.lastName, sc.email, sc.professorForExtraCredit,
-            sc.checkinTime, sc.endTime,
-            sc.studentLocation, sc.endLocation
-        FROM student_checkins sc
-        WHERE sc.scannedEventID = ?
-    ''', (event_id,)).fetchall()
-
-    conn.close()
-
-    emails = {}
-
-    for row in results:
-        first_name, last_name, email, professor, checkin_time, checkout_time, start_loc, end_loc = row
-
-        start_lat, start_lon = parse_location(start_loc) if start_loc else (None, None)
-        end_lat, end_lon = parse_location(end_loc) if end_loc else (None, None)
-
-        if None in [start_lat, start_lon, end_lat, end_lon]:
-            continue  # skip if any location is missing or invalid
-
-        dist_checkin = haversine_distance(event_lat, event_lon, start_lat, start_lon)
-        dist_checkout = haversine_distance(event_lat, event_lon, end_lat, end_lon)
-
-        if dist_checkin <= 200 and dist_checkout <= 200:
-            if professor not in emails:
-                emails[professor] = []
-
-            emails[professor].append({
-                'first_name': first_name,
-                'last_name': last_name,
-                'email': email,
-                'event_name': event_name,
-                'event_id': event_id,
-                'event_date': event_date,
-                'official_start': start_time,
-                'official_end': stop_time,
-                'checkin_time': checkin_time,
-                'checkout_time': checkout_time or "Not Submitted"
-            })
-
-    return emails
+    if checkin_in_range and checkout_in_range:
+        return "✅ Both Locations Within 100m"
+    elif checkin_in_range:
+        return "⚠️ Only Check-In Within Range"
+    elif checkout_in_range:
+        return "⚠️ Only Check-Out Within Range"
+    else:
+        return "❌ Neither Location Within Range"
 
 
 def send_professor_emails(event_id):
-    """
-    Send emails to professors with a summary of student attendance records.
-    """
     print(f"[🚨 EMAIL JOB STARTED] Event ID: {event_id}")
-    emails = construct_email_records(event_id)
-    print(f"[🗃 EMAIL DATA] Found {len(emails)} professors for Event ID {event_id}")
-    professors = emails.keys()
+    emails_by_professor = {}
 
-    # Get event name
+    # 💥 Prevent duplicate sends
+    conn_check = get_db_connection()
+    status = conn_check.execute("SELECT professor_email_sent FROM events WHERE eventID = ?", (event_id,)).fetchone()
+    conn_check.close()
+
+    if status and status["professor_email_sent"] == 1:
+        print(f"[🚫 ABORTED] Email already sent for Event ID {event_id}")
+        return
+
     conn = get_db_connection()
-    if not conn:
-        print("[❌ ERROR] Could not get DB connection")
+    cursor = conn.cursor()
 
-    event = conn.execute('SELECT eventName FROM events WHERE eventID = ?', (event_id,)).fetchone()
+    # Fetch event details
+    event = cursor.execute('''
+        SELECT eventName, eventDate, startTime, stopTime, latitude, longitude
+        FROM events WHERE eventID = ?
+    ''', (event_id,)).fetchone()
+
+    if not event:
+        print("[❌ ERROR] Event not found.")
+        conn.close()
+        return
+
+    event_name, event_date, start_time, stop_time, event_lat, event_lon = event
+
+    # Fetch all check-ins for the event
+    rows = cursor.execute('''
+        SELECT firstName, lastName, email, classForExtraCredit, professorForExtraCredit,
+               checkinTime, endTime, studentLocation, endLocation
+        FROM student_checkins
+        WHERE scannedEventID = ?
+    ''', (event_id,)).fetchall()
     conn.close()
-    event_name = event[0] if event else "Unknown Event"
 
+    for row in rows:
+        first, last, email, class_name, prof_name, checkin_time, end_time, loc_start, loc_end = row
+
+        location_status = evaluate_student_location(event_lat, event_lon, loc_start, loc_end)
+
+        if prof_name not in emails_by_professor:
+            emails_by_professor[prof_name] = []
+
+        emails_by_professor[prof_name].append({
+            "name": f"{first} {last}",
+            "email": email,
+            "class": class_name,
+            "event_id": event_id,
+            "event_date": event_date,
+            "official_start": start_time,
+            "official_end": stop_time,
+            "student_checkin": checkin_time,
+            "student_checkout": end_time or "Not Submitted",
+            "location_status": location_status
+        })
+
+    if not emails_by_professor:
+        print(f"[⚠️ NO MATCH] No check-ins found for Event {event_id}")
+        return
+
+    # Send email to each professor
     conn_fakedb = get_fakedb_connection()
-    if not conn:
-        print("[❌ ERROR] Could not get DB connection")
-
-    for professor in professors:
-        professor_email = conn_fakedb.execute(
+    for prof, students in emails_by_professor.items():
+        prof_email_row = conn_fakedb.execute(
             'SELECT professor_email FROM Professor WHERE professor_name = ?',
-            (professor,)
+            (prof,)
         ).fetchone()
 
-        if not professor_email:
+        if not prof_email_row:
+            print(f"[❌ NO EMAIL] No email found for professor: {prof}")
             continue
 
-        student_rows = emails[professor]
-        print(f"[📨 EMAIL TO] {professor} → {professor_email}")
+        recipient = prof_email_row[0]
 
-        # Plaintext fallback
-        plaintext_msg = f"Hello {professor},\nHere is the attendance summary for {event_name} on {student_rows[0]['event_date']}:\n"
-        for s in student_rows:
-            plaintext_msg += f"{s['first_name']} {s['last_name']} | {s['email']} | Check-in: {s['checkin_time']} | Check-out: {s['checkout_time']}\n"
-
-        # HTML Table
-        html_msg = f'''
-        <html>
-            <body>
-                <p>Hello {professor},</p>
-                <p>Here is the attendance summary for <strong>{event_name}</strong> on <strong>{student_rows[0]['event_date']}</strong>:</p>
-                <table border="1" style="border-collapse: collapse; width: 100%;">
-                    <tr>
-                        <th>Name</th>
-                        <th>Email</th>
-                        <th>Event ID</th>
-                        <th>Event Date</th>
-                        <th>Official Start</th>
-                        <th>Official End</th>
-                        <th>Check-in</th>
-                        <th>Check-out</th>
-                    </tr>
+        html_table = '''
+        <table border="1" cellpadding="5" style="border-collapse: collapse; width: 100%;">
+            <tr>
+                <th>Name</th><th>Email</th><th>Class</th><th>Event ID</th><th>Date</th>
+                <th>Official Start</th><th>Official End</th>
+                <th>Check-in</th><th>Check-out</th><th>Location Status</th>
+            </tr>
         '''
-
-        for s in student_rows:
-            html_msg += f'''
+        for s in students:
+            html_table += f'''
                 <tr>
-                    <td>{s['first_name']} {s['last_name']}</td>
-                    <td>{s['email']}</td>
-                    <td>{s['event_id']}</td>
-                    <td>{s['event_date']}</td>
-                    <td>{s['official_start']}</td>
-                    <td>{s['official_end']}</td>
-                    <td>{s['checkin_time']}</td>
-                    <td>{s['checkout_time']}</td>
+                    <td>{s["name"]}</td>
+                    <td>{s["email"]}</td>
+                    <td>{s["class"]}</td>  <!-- ✅ NEW: class from student dict -->
+                    <td>{s["event_id"]}</td>
+                    <td>{s["event_date"]}</td>
+                    <td>{s["official_start"]}</td>
+                    <td>{s["official_end"]}</td>
+                    <td>{s["student_checkin"]}</td>
+                    <td>{s["student_checkout"]}</td>
+                    <td>{s["location_status"]}</td>
                 </tr>
             '''
+        html_table += '</table>'
 
-        html_msg += '''
-                </table>
-                <p>Please review the times and assign attendance credit manually based on their duration.</p>
-            </body>
-        </html>
+        html_msg = f'''
+        <p>Hello {prof},</p>
+        <p>Below is the attendance summary for <strong>{event_name}</strong> on {event_date}. Each student is tagged with how close they were to the event based on check-in and check-out locations.</p>
+        {html_table}
         '''
 
-        with app.app_context():
-            try:
-                msg = Message(
-                    subject=f'Student Attendance Report - {event_name}',
-                    recipients=[professor_email[0]],
-                    body=plaintext_msg,
-                    html=html_msg
-                )
-                mail.send(msg)
-                print(f"[✅ EMAIL SENT] Event {event_id} → {professor} ({professor_email[0]})")
-            except Exception as e:
-                print(f"[❌ EMAIL FAILED] Event {event_id} → {professor} ({professor_email[0]}): {e}")
+        plaintext_msg = f"Professor {prof},\nHere are your students for event {event_name} on {event_date}:\n"
+        for s in students:
+            plaintext_msg += f"{s['name']} | {s['email']} | Check-in: {s['student_checkin']} | Check-out: {s['student_checkout']} | {s['location_status']}\n"
+
+        try:
+            msg = Message(
+                subject=f"Attendance Summary: {event_name}",
+                recipients=[recipient],
+                body=plaintext_msg,
+                html=html_msg
+            )
+            mail.send(msg)
+            print(f"[✅ EMAIL SENT] To: {prof} ({recipient}) for Event ID {event_id}")
+        except Exception as e:
+            print(f"[❌ EMAIL FAILED] To: {prof} ({recipient}): {e}")
 
     conn_fakedb.close()
 
-    # Mark this event as "email sent"
+    # ✅ Mark event as email sent
     conn = get_db_connection()
     conn.execute("UPDATE events SET professor_email_sent = 1 WHERE eventID = ?", (event_id,))
     conn.commit()
     conn.close()
-    print("Updated events table for email sent")
+    print(f"[📬 STATUS] Marked Event ID {event_id} as professor_email_sent = 1")
 
-
-def reschedule_pending_emails():
-    """
-    On server restart, re-schedule any professor emails that haven't been sent
-    and whose stopTime is still in the future (within 5 minutes window).
-    """
+@app.route("/send_email_summary/<int:event_id>")
+@login_required
+def send_email_summary(event_id):
     conn = get_db_connection()
-    now = datetime.now()
+    cursor = conn.cursor()
 
-    events = conn.execute('''
-        SELECT eventID, eventDate, stopTime 
-        FROM events 
-        WHERE professor_email_sent = 0
-    ''').fetchall()
+    # Check check-ins
+    students = cursor.execute("""
+        SELECT firstName, lastName, email, classForExtraCredit, professorForExtraCredit
+        FROM student_checkins
+        WHERE scannedEventID = ?
+    """, (event_id,)).fetchall()
 
-    for event in events:
-        event_id, event_date, stop_time = event
-        try:
-            stop_dt = datetime.strptime(f"{event_date} {stop_time}", "%Y-%m-%d %H:%M")
-            execute_dt = stop_dt + timedelta(minutes=5)
+    if not students:
+        conn.close()
+        return render_template("email_confirmation.html",
+                               grouped_by_prof={},
+                               event_id=event_id,
+                               show_send_button=False,
+                               show_resend_button=False)
 
-            if execute_dt > now:
-                # Job still valid, reschedule it
-                scheduler.add_job(
-                    func=send_professor_emails,
-                    trigger='date',
-                    run_date=execute_dt,
-                    args=[event_id],
-                    id=f"professor_email_{event_id}",
-                    replace_existing=True
-                )
-                print(f"Rescheduled professor email for {event_id}.")
-        except Exception as e:
-            print(f"[RESCHEDULE ERROR] Could not reschedule email for event {event_id}: {e}")
+    grouped = {}
+    for s in students:
+        prof = s["professorForExtraCredit"]
+        grouped.setdefault(prof, []).append({
+            "name": f"{s['firstName']} {s['lastName']}",
+            "email": s["email"],
+            "class": s["classForExtraCredit"]
+        })
 
+    # Check status
+    status = cursor.execute("SELECT professor_email_sent FROM events WHERE eventID = ?", (event_id,)).fetchone()
     conn.close()
 
+    already_sent = status and status[0] == 1
+    show_send_button = not already_sent
+    show_resend_button = already_sent
+
+    # ❗️Only send email if not already sent
+    if show_send_button:
+        send_professor_emails(event_id)
+
+    return render_template("email_confirmation.html",
+                           grouped_by_prof=grouped,
+                           event_id=event_id,
+                           show_send_button=False,
+                           show_resend_button=show_resend_button)
+
+@app.route("/force_resend_email/<int:event_id>", methods=["POST"])
+@login_required
+def force_resend_email(event_id):
+    # Optional: log forced sends if needed
+    print(f"[🔁 FORCED EMAIL RESEND] for Event {event_id} by user {session.get('user_id')}")
+    # Remove the 'sent' flag temporarily
+    conn = get_db_connection()
+    conn.execute("UPDATE events SET professor_email_sent = 0 WHERE eventID = ?", (event_id,))
+    conn.commit()
+    conn.close()
+    # Call send logic again
+    send_professor_emails(event_id)
+    return redirect(url_for("send_email_summary", event_id=event_id))
 
 @app.route("/submit_event", methods=["POST"])
 @login_required
@@ -1130,6 +1127,45 @@ def submit_event():
     event_location = request.form.get("event_location")
     is_recurring = request.form.get("is_recurring") == "true"
     event_description = request.form.get("event_info", "").strip()
+
+    try:
+        # Parse time fields
+        start_time_obj = datetime.strptime(start_time, "%H:%M").time()
+        stop_time_obj = datetime.strptime(stop_time, "%H:%M").time()
+
+        if stop_time_obj <= start_time_obj:
+            flash("❌ End time must be after start time.", "error")
+            return redirect(url_for("events"))
+
+        # Validate single event date
+        if not is_recurring:
+            event_date_obj = datetime.strptime(event_date, "%Y-%m-%d").date()
+            event_datetime = datetime.combine(event_date_obj, start_time_obj)
+            now = datetime.now()
+            if event_datetime < now:
+                flash("❌ You cannot create an event in the past.", "error")
+                return redirect(url_for("events"))
+
+        # Validate recurring event dates
+        else:
+            recurrence_start = request.form.get("recurrence_start_date")
+            recurrence_end = request.form.get("recurrence_end_date")
+
+            recurrence_start_obj = datetime.strptime(recurrence_start, "%Y-%m-%d").date()
+            recurrence_end_obj = datetime.strptime(recurrence_end, "%Y-%m-%d").date()
+
+            if recurrence_start_obj < date.today():
+                flash("❌ Recurrence start date cannot be in the past.", "error")
+                return redirect(url_for("events"))
+
+            if recurrence_end_obj < recurrence_start_obj:
+                flash("❌ Recurrence end date cannot be before the start date.", "error")
+                return redirect(url_for("events"))
+
+    except ValueError as ve:
+        flash("❌ Invalid date or time format.", "error")
+        logging.error(f"[PARSE ERROR] {ve}")
+        return redirect(url_for("events"))
 
     recurrence_type = request.form.get("recurrence", "none")
     # 🔒 Block if recurrence type is 'none' but user selected recurring (unless they confirmed)
@@ -1295,28 +1331,33 @@ def submit_event():
         logging.debug(f"✅ Event {event_id} inserted successfully")
 
         get_or_create_qr_code(event_id)
-
-        # Optional: Schedule email 5 mins after event ends
-        try:
-            event_end_str = f"{event_date} {stop_time}"
-            event_end_dt = datetime.strptime(event_end_str, "%Y-%m-%d %H:%M")
-            execute_time = event_end_dt + timedelta(minutes=5)
-
-            scheduler.add_job(
-                func=send_professor_emails,
-                trigger='date',
-                run_date=execute_time,
-                args=[event_id],
-                id=f"professor_email_{event_id}",
-                replace_existing=True
-            )
-            logging.debug(f"📧 Email job scheduled for Event ID {event_id}")
-        except Exception as e:
-            logging.error(f"[SCHEDULER ERROR] Could not schedule email: {e}")
-
-        print("✅ Reached submit_event(), is_recurring:", is_recurring)
         return redirect(url_for("dashboard", created=1))
 
+@app.route("/api/my_events")
+@login_required
+def my_events():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    rows = cursor.execute("""
+        SELECT eventID, eventName, eventDate, startTime, stopTime, professor_email_sent
+        FROM events
+        WHERE professorID = ?
+        AND datetime(eventDate || ' ' || stopTime) <= datetime('now')
+        ORDER BY datetime(eventDate || ' ' || stopTime) DESC
+    """, (session["user_id"],)).fetchall()
+    conn.close()
+
+    events = []
+    for row in rows:
+        events.append({
+            "eventID": row["eventID"],
+            "eventName": row["eventName"],
+            "eventDate": row["eventDate"],
+            "startTime": row["startTime"],
+            "stopTime": row["stopTime"],
+            "emailSent": bool(row["professor_email_sent"])
+        })
+    return jsonify(events)
 
 # Route: API endpoint for event list (returns JSON)
 @app.route("/api/event/information", methods=["GET"])
@@ -1359,6 +1400,7 @@ def get_event_information():
 
     return jsonify(formatted_events)
 
+
 @app.route("/edit_event/<int:event_id>", methods=["GET", "POST"])
 @login_required
 def edit_event(event_id):
@@ -1375,22 +1417,32 @@ def edit_event(event_id):
         latlng = request.form.get("event_location")
         lat, lng = map(float, latlng.split(","))
 
-        # Combine times
+        # Combine datetime
         now = datetime.now()
         start_dt = datetime.strptime(f"{date} {start_time}", "%Y-%m-%d %H:%M")
         stop_dt = datetime.strptime(f"{date} {stop_time}", "%Y-%m-%d %H:%M")
 
-        # Reject if start or stop time are invalid
-        if start_dt <= now:
-            return "⛔ You cannot schedule an event that starts in the past.", 400
-        if stop_dt <= now:
-            return "⛔ Event end time must be in the future.", 400
-        if stop_dt <= start_dt:
-            return "⛔ End time must be after start time.", 400
+        # Fetch event again for re-rendering if needed
+        event = cursor.execute("""
+            SELECT * FROM events WHERE eventID = ? AND professorID = ?
+        """, (event_id, session["user_id"])).fetchone()
 
-        # Update the event in the database
+        error = None
+        if start_dt <= now:
+            error = "⛔ You cannot schedule an event that starts in the past."
+        elif stop_dt <= now:
+            error = "⛔ Event end time must be in the future."
+        elif stop_dt <= start_dt:
+            error = "⛔ End time must be after start time."
+
+        if error:
+            conn.close()
+            return render_template("edit_event.html", event=event, error_message=error)
+
+        # Otherwise, update the event
         cursor.execute("""
-            UPDATE events SET eventName = ?, eventDescription = ?, eventDate = ?, startTime = ?, stopTime = ?, latitude = ?, longitude = ?
+            UPDATE events
+            SET eventName = ?, eventDescription = ?, eventDate = ?, startTime = ?, stopTime = ?, latitude = ?, longitude = ?
             WHERE eventID = ? AND professorID = ?
         """, (name, description, date, start_time, stop_time, lat, lng, event_id, session["user_id"]))
         conn.commit()
@@ -1409,6 +1461,7 @@ def edit_event(event_id):
         return "Unauthorized or event not found", 403
 
     return render_template("edit_event.html", event=event)
+
 
 @app.route("/delete_event/<int:event_id>", methods=["POST"])
 @login_required
@@ -1431,6 +1484,7 @@ def delete_event(event_id):
     conn.close()
 
     return redirect(url_for("dashboard", deleted=1))
+
 
 @app.route("/submit_place", methods=["POST"])
 @login_required
@@ -1534,6 +1588,7 @@ def find_student():
 def todatetime_filter(value, format="%Y-%m-%d %H:%M"):
     return datetime.strptime(value, format)
 
+
 @app.route("/event_info/<int:event_id>")
 @login_required
 def event_info(event_id):
@@ -1554,11 +1609,5 @@ def event_info(event_id):
     # Pass current datetime as a string to match format in Jinja
     return render_template("event_info.html", event=event, now=datetime.now().strftime("%Y-%m-%d %H:%M"))
 
-@app.route("/test_send_email/<int:event_id>")
-def test_send_email(event_id):
-    send_professor_emails(event_id)
-    return "Sent test email."
-
 if __name__ == "__main__":
-    reschedule_pending_emails()
     app.run(debug=True)

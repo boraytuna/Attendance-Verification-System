@@ -89,131 +89,176 @@
             color: red;
             display: none; /* hidden by default; shown if user fails to pick a location */
         }
+
+        .active-toggle {
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.3);
+            transform: scale(1.03);
+            transition: all 0.2s ease-in-out;
+        }
+
+        .sent-btn {
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 5px;
+            cursor: pointer;
+            opacity: 0.85;
+            transition: opacity 0.2s ease-in-out;
+        }
+
+        .sent-btn:hover {
+            opacity: 1;
+        }
     </style>
 
     <body>
     <div class="content-container">
-        <div class="title-container">
-            <h1>🎓 Event Management</h1>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 15px; margin-top: 20px;">
+            <h1 style="font-size: 32px; color: #0056b3;">🎓 Event Management</h1>
+            <div style="display: flex; gap: 10px;">
+                <button id="showCreateBtn"
+                        style="background-color: #0056b3; color: white; padding: 10px 20px; border: none; border-radius: 6px;">
+                    ➕ Create New Event
+                </button>
+                <button id="showNotifyBtn"
+                        style="background-color: #28a745; color: white; padding: 10px 20px; border: none; border-radius: 6px;">
+                    📤 Notify Professors
+                </button>
+            </div>
         </div>
 
-        <div class="form-container">
-            <form action="/submit_event" method="post">
-                <!-- Tracks whether this event is recurring -->
-                <input type="hidden" name="is_recurring" id="is_recurring" value="false">
+        <!-- 🟦 Create Event Panel (Centered Wrapper) -->
+        <div style="display: flex; justify-content: center; width: 100%;">
+            <div id="createEventSection" class="form-container" style="width: 100%; max-width: 600px;">
+                <form action="/submit_event" method="post">
+                    <input type="hidden" name="is_recurring" id="is_recurring" value="false">
 
-                <table>
-                    <!-- EVENT NAME -->
-                    <tr>
-                        <td><label for="event_name">Event Name:</label></td>
-                        <td><input type="text" id="event_name" name="event_name" required></td>
-                    </tr>
+                    <table>
+                        <tr>
+                            <td><label for="event_name">Event Name:</label></td>
+                            <td><input type="text" id="event_name" name="event_name" required></td>
+                        </tr>
 
-                    <!-- EVENT DESCRIPTION -->
-                    <tr>
-                        <td><label for="event_info">Event Info:</label></td>
-                        <td>
-        <textarea id="event_info" name="event_info"
-                  placeholder="Describe your event — what is it, who's it for, and why it matters. Aim for 250–300 words."
-                  rows="6"
-                  style="resize: vertical; min-height: 120px; font-family: inherit; font-size: 15px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; width: 100%; box-sizing: border-box;"></textarea>
-                        </td>
-                    </tr>
+                        <tr>
+                            <td><label for="event_info">Event Info:</label></td>
+                            <td>
+                        <textarea id="event_info" name="event_info"
+                                  placeholder="Describe your event — what is it, who's it for, and why it matters. Aim for 250–300 words."
+                                  rows="6"
+                                  style="resize: vertical; min-height: 120px; font-family: inherit; font-size: 15px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; width: 100%; box-sizing: border-box;"></textarea>
+                            </td>
+                        </tr>
 
-                    <!-- SINGLE EVENT DATE -->
-                    <tr id="eventDateRow">
-                        <td><label for="event_date">Event Date:</label></td>
-                        <td><input type="date" id="event_date" name="event_date" required></td>
-                    </tr>
+                        <tr id="eventDateRow">
+                            <td><label for="event_date">Event Date:</label></td>
+                            <td><input type="date" id="event_date" name="event_date" required></td>
+                        </tr>
 
-                    <!-- TOGGLE RECURRING -->
-                    <tr>
-                        <td colspan="2" style="text-align: center;">
-                            <button type="button" id="toggleRecurrence"
-                                    style="margin-top: 0; background-color: #0056b3; color: white;">
-                                🔁 Make This a Recurring Event
-                            </button>
-                        </td>
-                    </tr>
-
-                    <!-- RECURRING SECTION (hidden by default) -->
-                    <tr id="recurrenceSection" style="display: none;">
-                        <td colspan="2">
-                            <div style="margin-top: 10px; background-color: #eef3f7; padding: 15px; border-radius: 8px;">
-                                <label for="recurrence">Repeat:</label>
-                                <select name="recurrence" id="recurrence">
-                                    <option value="none">Does not repeat</option>
-                                    <option value="daily">Daily</option>
-                                    <option value="weekly">Weekly</option>
-                                    <option value="monthly">Monthly</option>
-                                </select>
-
-                                <label for="recurrence_start_date">Start Date:</label>
-                                <input type="date" id="recurrence_start_date" name="recurrence_start_date">
-
-                                <label for="recurrence_end_date" style="margin-top: 10px;">End Date:</label>
-                                <input type="date" id="recurrence_end_date" name="recurrence_end_date">
-
-                                <div style="font-size: 13px; color: #666; margin-top: 10px;">
-                                    ℹ️ Recurring events will be created for each interval between the start and end
-                                    dates.
-                                </div>
-                            </div>
-                        </td>
-                    </tr>
-
-                    <!-- START / END TIME -->
-                    <tr>
-                        <td><label for="start_time">Start Time:</label></td>
-                        <td><input type="time" id="start_time" name="start_time" required></td>
-                    </tr>
-                    <tr>
-                        <td><label for="stop_time">End Time:</label></td>
-                        <td><input type="time" id="stop_time" name="stop_time" required></td>
-                    </tr>
-
-                    <!-- LOCATION SELECTION -->
-                    <tr>
-                        <td><label for="saved_locations">Choose a Location:</label></td>
-                        <td>
-                            <select id="saved_locations" onchange="handleLocationSelection()">
-                                <option value="">-- Select a saved location --</option>
-                            </select>
-                        </td>
-                    </tr>
-
-                    <!-- CREATE NEW PLACE BUTTON + WARNING -->
-                    <tr>
-                        <td colspan="2">
-                            <div style="margin-top: 20px; padding: 15px; background-color: #fff3cd; border: 1px solid #ffeeba; border-radius: 8px; text-align: center; font-size: 14px; color: #856404;">
-                                ⚠️ Creating a new place will cause all current changes to be lost.
-                            </div>
-
-                            <div style="text-align: center; margin-top: 10px;">
-                                <button type="button" onclick="window.location.href='/places'"
-                                        style="width: auto; padding: 10px 16px;">➕ Create New Place
+                        <tr>
+                            <td colspan="2" style="text-align: center;">
+                                <button type="button" id="toggleRecurrence"
+                                        style="margin-top: 0; background-color: #0056b3; color: white;">
+                                    🔁 Make This a Recurring Event
                                 </button>
-                            </div>
-                        </td>
-                    </tr>
+                            </td>
+                        </tr>
 
-                    <!-- HIDDEN LOCATION FIELD + ERROR MSG -->
-                    <tr>
-                        <td colspan="2">
-                            <input type="hidden" id="event_location" name="event_location">
-                            <p id="location_error">⚠️ Please select a location before submitting.</p>
-                        </td>
-                    </tr>
+                        <tr id="recurrenceSection" style="display: none;">
+                            <td colspan="2">
+                                <div style="margin-top: 10px; background-color: #eef3f7; padding: 15px; border-radius: 8px;">
+                                    <label for="recurrence">Repeat:</label>
+                                    <select name="recurrence" id="recurrence">
+                                        <option value="none">Does not repeat</option>
+                                        <option value="daily">Daily</option>
+                                        <option value="weekly">Weekly</option>
+                                        <option value="monthly">Monthly</option>
+                                    </select>
 
-                    <!-- SUBMIT BUTTON -->
-                    <tr>
-                        <td colspan="2">
-                            <button type="submit">Create Event</button>
-                        </td>
-                    </tr>
-                </table>
-            </form>
+                                    <label for="recurrence_start_date">Start Date:</label>
+                                    <input type="date" id="recurrence_start_date" name="recurrence_start_date">
+
+                                    <label for="recurrence_end_date" style="margin-top: 10px;">End Date:</label>
+                                    <input type="date" id="recurrence_end_date" name="recurrence_end_date">
+
+                                    <div style="font-size: 13px; color: #666; margin-top: 10px;">
+                                        ℹ️ Recurring events will be created for each interval between the start and end
+                                        dates.
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td><label for="start_time">Start Time:</label></td>
+                            <td><input type="time" id="start_time" name="start_time" required></td>
+                        </tr>
+                        <tr>
+                            <td><label for="stop_time">End Time:</label></td>
+                            <td><input type="time" id="stop_time" name="stop_time" required></td>
+                        </tr>
+
+                        <tr>
+                            <td><label for="saved_locations">Choose a Location:</label></td>
+                            <td>
+                                <select id="saved_locations" onchange="handleLocationSelection()">
+                                    <option value="">-- Select a saved location --</option>
+                                </select>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td colspan="2">
+                                <div style="margin-top: 20px; padding: 15px; background-color: #fff3cd; border: 1px solid #ffeeba; border-radius: 8px; text-align: center; font-size: 14px; color: #856404;">
+                                    ⚠️ Creating a new place will cause all current changes to be lost.
+                                </div>
+
+                                <div style="text-align: center; margin-top: 10px;">
+                                    <button type="button" onclick="window.location.href='/places'"
+                                            style="width: auto; padding: 10px 16px;">➕ Create New Place
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td colspan="2">
+                                <input type="hidden" id="event_location" name="event_location">
+                                <p id="location_error">⚠️ Please select a location before submitting.</p>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td colspan="2">
+                                <button type="submit">Create Event</button>
+                            </td>
+                        </tr>
+                    </table>
+                </form>
+            </div>
         </div>
+
+        <!-- 🟩 Notify Professors Panel (Centered Wrapper) -->
+        <div style="display: flex; justify-content: center; width: 100%;">
+            <div id="notifySection" style="display: none; width: 100%; max-width: 900px; margin-top: 20px;">
+                <h2 style="text-align:center; margin-bottom: 20px;">📤 Notify Professors About Your Events</h2>
+                <div id="eventListLoading">Loading your events...</div>
+                <table id="notifyTable"
+                       style="display:none; width: 100%; border-collapse: collapse; background-color: white; border-radius: 10px; overflow: hidden; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
+                    <thead>
+                    <tr style="background-color: #0056b3; color: white;">
+                        <th style="padding: 10px;">Event Name</th>
+                        <th>Date</th>
+                        <th>Start</th>
+                        <th>End</th>
+                        <th>Action</th>
+                    </tr>
+                    </thead>
+                    <tbody id="notifyTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
     </div>
 
     <!-- Inline Script for Form Logic -->
@@ -317,17 +362,149 @@
     <script>
         document.querySelector("form").addEventListener("submit", (e) => {
             const isRecurring = document.getElementById("is_recurring").value === "true";
-            const recurrenceType = document.getElementById("recurrence").value;
 
-            if (isRecurring && recurrenceType === "none") {
-                const proceed = confirm("⚠️ You selected recurring, but chose 'Does not repeat' as the type. Do you want to continue?");
-                if (!proceed) {
-                    e.preventDefault(); // Stop form submission
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);  // ignore time, just compare dates
+
+            // ⏰ Time check helper
+            function parseTime(str) {
+                const [hours, minutes] = str.split(":").map(Number);
+                return hours * 60 + minutes;
+            }
+
+            if (isRecurring) {
+                const startDate = new Date(document.getElementById("recurrence_start_date").value);
+                const endDate = new Date(document.getElementById("recurrence_end_date").value);
+                const startTime = document.getElementById("start_time").value;
+                const endTime = document.getElementById("stop_time").value;
+
+                if (startDate < today) {
+                    alert("🚫 Recurrence start date cannot be in the past.");
+                    e.preventDefault();
+                    return;
+                }
+
+                if (endDate < startDate) {
+                    alert("🚫 Recurrence end date cannot be before the start date.");
+                    e.preventDefault();
+                    return;
+                }
+
+                if (parseTime(endTime) <= parseTime(startTime)) {
+                    alert("🚫 End time must be after start time.");
+                    e.preventDefault();
+                    return;
+                }
+
+            } else {
+                const eventDateStr = document.getElementById("event_date").value;
+                const startTime = document.getElementById("start_time").value;
+                const endTime = document.getElementById("stop_time").value;
+
+                const eventDate = new Date(eventDateStr);
+                const now = new Date();
+
+                // Combine date and time into one datetime object
+                const eventStart = new Date(`${eventDateStr}T${startTime}`);
+                if (eventStart < now) {
+                    alert("🚫 You cannot create an event in the past.");
+                    e.preventDefault();
+                    return;
+                }
+
+                if (parseTime(endTime) <= parseTime(startTime)) {
+                    alert("🚫 End time must be after start time.");
+                    e.preventDefault();
                     return;
                 }
             }
 
-            console.log("🚀 Form submitted!");
+            // ✅ If no checks failed
+            console.log("🚀 Event passed validation!");
+        });
+    </script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const createSection = document.getElementById("createEventSection");
+            const notifySection = document.getElementById("notifySection");
+            const showCreateBtn = document.getElementById("showCreateBtn");
+            const showNotifyBtn = document.getElementById("showNotifyBtn");
+
+            showCreateBtn.addEventListener("click", () => {
+                createSection.style.display = "block";
+                notifySection.style.display = "none";
+            });
+
+            showNotifyBtn.addEventListener("click", () => {
+                createSection.style.display = "none";
+                notifySection.style.display = "block";
+                loadEventsForNotification();
+            });
+
+            function loadEventsForNotification() {
+                fetch("/api/my_events")
+                    .then(response => response.json())
+                    .then(events => {
+                        const table = document.getElementById("notifyTable");
+                        const tableBody = document.getElementById("notifyTableBody");
+                        const loading = document.getElementById("eventListLoading");
+
+                        loading.style.display = "none";
+                        table.style.display = "table";
+                        tableBody.innerHTML = "";
+
+                        if (events.length === 0) {
+                            tableBody.innerHTML = "<tr><td colspan='5'>No events found.</td></tr>";
+                            return;
+                        }
+
+                        events.forEach(e => {
+                            const row = document.createElement("tr");
+                            row.innerHTML = `
+                    <td style="padding: 10px;">${e.eventName}</td>
+                    <td>${e.eventDate}</td>
+                    <td>${e.startTime}</td>
+                    <td>${e.stopTime}</td>
+                    <td>
+                        <a href="/send_email_summary/${e.eventID}">
+                            <button style="background-color: ${e.emailSent ? 'gray' : '#28a745'}; padding: 8px 14px; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                                ${e.emailSent ? 'Sent' : 'Send'}
+                            </button>
+                        </a>
+                    </td>`;
+                            tableBody.appendChild(row);
+                        });
+                    })
+                    .catch(err => {
+                        document.getElementById("eventListLoading").innerText = "⚠️ Failed to load events.";
+                        console.error("Failed to fetch event list:", err);
+                    });
+            }
+        });
+    </script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const createBtn = document.getElementById("showCreateBtn");
+            const notifyBtn = document.getElementById("showNotifyBtn");
+
+            function setActive(btn) {
+                createBtn.classList.remove("active-toggle");
+                notifyBtn.classList.remove("active-toggle");
+                btn.classList.add("active-toggle");
+            }
+
+            createBtn.addEventListener("click", function () {
+                setActive(createBtn);
+            });
+
+            notifyBtn.addEventListener("click", function () {
+                setActive(notifyBtn);
+            });
+
+            // Set default active on page load
+            setActive(createBtn);
         });
     </script>
     </body>
