@@ -75,3 +75,13 @@
     - Improves the user experience.
     - Slightly increases complexity of backend logic.
     - Requires more careful consideration of the QR code generation logic.
+
+### Refactored the logic for providing student event attendance records to professors.
+- #### Description:
+    - Student event attendance records are no longer sent automatically (by a scheduler). Instead, professors request the attendance records through the system to receive the email. 
+- #### Motivation:
+    - Difficulty implementing the scheduler logic.
+    - Wanted to provide professors with the capability to re-receive the attendance records email for an event.
+- #### Implications:
+    - Decreases backend complexity.
+    - Gives professors some capacity to "debug" event attendance record issues.
