@@ -90,6 +90,7 @@ def create_tables():
             latitude REAL NOT NULL,
             longitude REAL NOT NULL,
             professorID INTEGER NOT NULL,
+            professor_email_sent INTEGER,
 
             -- New fields for recurring logic
             isRecurring BOOLEAN DEFAULT 0,
