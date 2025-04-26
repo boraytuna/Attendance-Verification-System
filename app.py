@@ -633,12 +633,21 @@ def student_interface(event_id):
     Pass the eventID and eventName to the HTML template."""
     # get the event name associated with the eventID
     cursor = get_db_connection().cursor()
-    event = cursor.execute("SELECT eventName FROM events WHERE eventID = ?", (event_id,)).fetchone()
-    if not event:
-        return "Event not found", 404
-    event_name = event["eventName"]
-    return render_template("student_checkin.html", eventID=event_id, eventName=event_name)
+    cursor.execute('SELECT eventName, eventDate, stopTime FROM events WHERE eventID = ?', (event_id,))
+    result = cursor.fetchone()
 
+    if not result:
+        return render_template("student_checkin.html", eventName="Event Not Found", eventEnd="2000-01-01T00:00:00")
+
+    event_name, event_date, stop_time = result
+
+    # 🛠 Normalize stop_time
+    if len(stop_time.split(':')) == 2:
+        stop_time += ":00"  # Convert HH:MM ➜ HH:MM:SS
+
+    event_end = datetime.strptime(f"{event_date} {stop_time}", "%Y-%m-%d %H:%M:%S").isoformat()
+
+    return render_template("student_checkin.html", eventName=event_name, eventEnd=event_end)
 
 # **API Routes for Student Check-In Email Verification**
 @app.route('/verify_email', methods=['POST'])

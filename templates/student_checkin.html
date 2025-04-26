@@ -22,7 +22,7 @@
 <!-- Scripts -->
 <script src="{{ url_for('static', filename='js/studentscript.js') }}"></script>
 
-<body>
+<body data-event-end="{{ eventEnd }}">
 
 <!-- Frame 1: Student Info -->
 <section id="frame1" style="display: block;">
@@ -180,6 +180,17 @@
              alt="Student form complete image">
         <p>✅ You're all set!</p>
         <p>Thanks for checking in. You may now close this tab.</p>
+    </div>
+</section>
+
+<!-- Frame 6: Event Ended -->
+<section id="frame6" style="display: none;">
+    <div class="content">
+        <h1>Check-In Closed</h1>
+        <p style="font-size: 1.2rem; color: #e63946;">
+            ❌ This event has already ended, and check-in is no longer possible.
+        </p>
+        <p>Please reach out to your event organizer if you believe this is a mistake.</p>
     </div>
 </section>
 
