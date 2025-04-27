@@ -64,7 +64,6 @@ def login_required(f):
 
     return decorated_function
 
-
 @app.route("/")
 def landing_page():
     """
@@ -893,7 +892,7 @@ def send_professor_emails(event_id):
     conn_db = get_db_connection()
     for prof, students in emails_by_professor.items():
         prof_email_row = conn_db.execute(
-            'SELECT professor_email FROM Professor WHERE professor_name = ?',
+            'SELECT professor_email FROM professors WHERE professor_name = ?',
             (prof,)
         ).fetchone()
 
