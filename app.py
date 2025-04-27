@@ -40,7 +40,6 @@ mail = Mail(app)
 if not os.path.exists(QR_CODE_FOLDER):
     os.makedirs(QR_CODE_FOLDER)
 
-
 # Function to connect to SQLite
 def get_db_connection():
     """
@@ -50,97 +49,6 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row  # Enables dictionary-style access
     conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
     return conn
-
-
-# TEMPORARY - function to connect to fake DB
-def get_fakedb_connection():
-    """
-    Establish a connection to the SQLite fake.db database.
-    """
-    conn = sqlite3.connect("fake.db")
-    conn.row_factory = sqlite3.Row  # Enables dictionary-style access
-    conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
-    return conn
-
-
-# Function to create tables
-def create_tables():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    # Create Users Table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            userID INTEGER PRIMARY KEY AUTOINCREMENT,
-            first_name TEXT NOT NULL,
-            last_name TEXT NOT NULL,
-            email TEXT NOT NULL,
-            password TEXT NOT NULL
-        )
-    ''')
-
-    # Create Events Table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS events (
-            eventID INTEGER PRIMARY KEY AUTOINCREMENT,
-            eventName TEXT NOT NULL,
-            eventDate DATE NOT NULL,
-            startTime TIME NOT NULL,
-            stopTime TIME NOT NULL,
-            latitude REAL NOT NULL,
-            longitude REAL NOT NULL,
-            professorID INTEGER NOT NULL,
-            professor_email_sent INTEGER,
-
-            -- New fields for recurring logic
-            isRecurring BOOLEAN DEFAULT 0,
-            recurrenceType TEXT,              -- daily, weekly, monthly
-            recurrenceStartDate DATE,         -- Start of the recurrence range
-            recurrenceEndDate DATE,           -- End of the recurrence range
-            recurrenceGroup TEXT,             -- Shared ID for all events in a series
-
-            -- New description column
-            eventDescription TEXT DEFAULT ''
-        )
-    ''')
-
-    # Create Student Check-Ins Table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS student_checkins(
-            checkinID INTEGER PRIMARY KEY AUTOINCREMENT,
-            deviceId TEXT NOT NULL,
-            firstName TEXT NOT NULL,
-            lastName TEXT NOT NULL,
-            email TEXT NOT NULL,
-            classForExtraCredit TEXT NOT NULL,
-            professorForExtraCredit TEXT NOT NULL,
-            scannedEventID INTEGER NOT NULL,
-            studentLocation TEXT NOT NULL,
-            checkinTime DATETIME DEFAULT CURRENT_TIMESTAMP,
-            endLocation TEXT,
-            endTime DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (scannedEventID) REFERENCES events(eventID)
-        )
-    ''')
-
-    # Create Places Table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS places (
-            placeID INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            latitude REAL NOT NULL,
-            longitude REAL NOT NULL,
-            building TEXT NOT NULL
-        )
-    ''')
-
-    conn.commit()
-    conn.close()
-
-
-# Ensure database tables exist
-create_tables()
-
 
 def login_required(f):
     """
@@ -155,7 +63,6 @@ def login_required(f):
         return f(*args, **kwargs)
 
     return decorated_function
-
 
 @app.route("/")
 def landing_page():
@@ -732,15 +639,10 @@ def verify_code():
 @app.route('/search_courses', methods=['GET'])
 def search_courses():
     """Search for courses based on user input."""
-    # TEMPORARY - connect to fake DB
-    conn = sqlite3.connect("fake.db")
-    conn.row_factory = sqlite3.Row  # Enables dictionary-style access
-    conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
-
-    search_term = request.args.get('query', '')
-    # conn = get_db_connection()
+    conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT course_name FROM Courses WHERE course_name LIKE ?", (f"%{search_term}%",))
+    search_term = request.args.get('query', '')
+    cursor.execute("SELECT course_name FROM courses WHERE course_name LIKE ?", (f"%{search_term}%",))
     results = cursor.fetchall()
     conn.close()
     return jsonify([row[0] for row in results])
@@ -749,15 +651,10 @@ def search_courses():
 @app.route('/search_professors', methods=['GET'])
 def search_professors():
     """Search for professors based on user input."""
-    # TEMPORARY - connect to fake DB
-    conn = sqlite3.connect("fake.db")
-    conn.row_factory = sqlite3.Row  # Enables dictionary-style access
-    conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
-
-    search_term = request.args.get('query', '')
-    # conn = get_db_connection()
+    conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT professor_name FROM Professor WHERE professor_name LIKE ?", (f"%{search_term}%",))
+    search_term = request.args.get('query', '')
+    cursor.execute("SELECT professor_name FROM professors WHERE professor_name LIKE ?", (f"%{search_term}%",))
     results = cursor.fetchall()
     conn.close()
     return jsonify([row[0] for row in results])
@@ -992,10 +889,10 @@ def send_professor_emails(event_id):
         return
 
     # Send email to each professor
-    conn_fakedb = get_fakedb_connection()
+    conn_db = get_db_connection()
     for prof, students in emails_by_professor.items():
-        prof_email_row = conn_fakedb.execute(
-            'SELECT professor_email FROM Professor WHERE professor_name = ?',
+        prof_email_row = conn_db.execute(
+            'SELECT professor_email FROM professors WHERE professor_name = ?',
             (prof,)
         ).fetchone()
 
@@ -1052,7 +949,7 @@ def send_professor_emails(event_id):
         except Exception as e:
             print(f"[❌ EMAIL FAILED] To: {prof} ({recipient}): {e}")
 
-    conn_fakedb.close()
+    conn_db.close()
 
     # ✅ Mark event as email sent
     conn = get_db_connection()
