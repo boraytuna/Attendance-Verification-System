@@ -35,9 +35,9 @@ app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USE_SSL'] = False
-app.config['MAIL_USERNAME'] = 'jrosestangle@gmail.com'
-app.config['MAIL_PASSWORD'] = 'pfdbqlrqisxzubmf'  # app pw
-app.config['MAIL_DEFAULT_SENDER'] = 'jrosestangle@gmail.com'
+app.config['MAIL_USERNAME'] = 'attendancesystem390@gmail.com'
+app.config['MAIL_PASSWORD'] = 'ujsxxudhtejnvygu'  # app pw
+app.config['MAIL_DEFAULT_SENDER'] = 'attendancesystem390@gmail.com'
 mail = Mail(app)
 
 if not os.path.exists(QR_CODE_FOLDER):
