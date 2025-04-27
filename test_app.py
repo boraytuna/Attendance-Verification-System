@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch, MagicMock
 import json
 from app import app, get_db_connection
 
@@ -46,6 +47,33 @@ class AttendanceAppTestCase(unittest.TestCase):
         response = self.app.get("/")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"<!DOCTYPE html", response.data)
+
+    """
+    Test student check-in functionality.
+    """
+    def checkin_student(self):
+        return self.app.post('/submit_student_checkin', json={
+            'firstName': 'Test',
+            'lastName': 'User',
+            'email': 'testuser@example.com',
+            'scannedEventID': '1',
+            'studentLocation': 'Test Location',
+            'deviceId': '12345',
+            'courses': [
+                {
+                    'className': 'Test Course',
+                    'professorName': 'Test Professor'
+                }
+            ]
+        })
+    
+    def test_student_checkin(self):
+        response = self.checkin_student()
+        self.assertEqual(response.status_code, 200)
+
+        data = response.get_json()
+        self.assertIsNotNone(data)
+        self.assertEqual(data['status'], 'success')
 
 if __name__ == '__main__':
     unittest.main()
