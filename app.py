@@ -1527,5 +1527,15 @@ def init_db_route():
 
     return "Database initialized!"
 
+@app.route("/debug/events")
+def debug_events():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT eventID, eventName, eventDate, startTime, stopTime FROM events ORDER BY eventID DESC")
+    rows = cursor.fetchall()
+    conn.close()
+
+    return "<br>".join([f"ID {row['eventID']}: {row['eventName']} on {row['eventDate']} from {row['startTime']} to {row['stopTime']}" for row in rows])
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0')
