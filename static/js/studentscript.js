@@ -2,25 +2,26 @@ document.addEventListener("DOMContentLoaded", function () {
     const pathParts = window.location.pathname.split('/');
     const eventIdFromUrl = pathParts.includes("student_checkin") ? pathParts[pathParts.indexOf("student_checkin") + 1] : null;
 
-    if (eventIdFromUrl && !sessionStorage.getItem("frameState")) {
+    const isColdQR = eventIdFromUrl && !sessionStorage.getItem("cachedStudent");
+
+    if (isColdQR) {
+        const freshCache = {
+            email: '',
+            lastName: '',
+            scannedEventID: eventIdFromUrl,
+            courses: [],
+            professorNames: [],
+            verified: false
+        };
+
+        sessionStorage.setItem("cachedStudent", JSON.stringify(freshCache));
         sessionStorage.setItem("frameState", "0");
+        sessionStorage.setItem("emailVerified", "false");
+        sessionStorage.removeItem("studentFormData");  // optional wipe
+
+        showFrame(0); // Always show Frame 1 on cold open
+        return; // ⬅️ Stop here — let student begin fresh flow
     }
-
-    // Always start clean for cold QR loads
-    let cachedStudent = {
-        email: '',
-        lastName: '',
-        scannedEventID: eventIdFromUrl || '',
-        courses: [],
-        professorNames: [],
-        verified: false,
-        frameState: 0  // always start at Frame 1
-    };
-
-    sessionStorage.setItem("cachedStudent", JSON.stringify(cachedStudent));
-
-    // Then show Frame 1 regardless
-    showFrame(0);
 
     const allFrames = document.getElementsByTagName("section");
     const table = document.getElementById("tableBody");
