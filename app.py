@@ -617,7 +617,7 @@ def resend_email():
 
     # Check cooldown
     if last_sent:
-        last_sent_time = datetime.strptime(last_sent, "%Y-%m-%d %H:%M:%S")
+        last_sent_time = pytz.timezone('US/Eastern').localize(datetime.strptime(last_sent, "%Y-%m-%d %H:%M:%S"))
         if get_eastern_now() < last_sent_time + timedelta(seconds=COOLDOWN_SECONDS):
             remaining = (last_sent_time + timedelta(seconds=COOLDOWN_SECONDS)) - get_eastern_now()
             return jsonify({
@@ -1064,7 +1064,10 @@ def submit_event():
         # Validate single event date
         if not is_recurring:
             event_date_obj = datetime.strptime(event_date, "%Y-%m-%d").date()
-            event_datetime = datetime.combine(event_date_obj, start_time_obj)
+            eastern = pytz.timezone("US/Eastern")
+            event_datetime_naive = datetime.combine(event_date_obj, start_time_obj)
+            event_datetime = eastern.localize(event_datetime_naive)
+
             now = get_eastern_now()
             if event_datetime < now:
                 flash("❌ You cannot create an event in the past.", "error")
@@ -1544,4 +1547,3 @@ def init_db_route():
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0')
-
