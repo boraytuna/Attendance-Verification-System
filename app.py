@@ -1535,7 +1535,16 @@ def debug_events():
     rows = cursor.fetchall()
     conn.close()
 
-    return "<br>".join([f"ID {row['eventID']}: {row['eventName']} on {row['eventDate']} from {row['startTime']} to {row['stopTime']}" for row in rows])
+    html = "<h2>Events in DB:</h2>"
+    if not rows:
+        html += "<p>No events found.</p>"
+    else:
+        html += "<ul>"
+        for row in rows:
+            html += f"<li><strong>ID {row['eventID']}</strong>: {row['eventName']} on {row['eventDate']} from {row['startTime']} to {row['stopTime']}</li>"
+        html += "</ul>"
+
+    return html
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0')
