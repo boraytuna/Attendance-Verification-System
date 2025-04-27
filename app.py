@@ -28,6 +28,8 @@ app.secret_key = os.urandom(24)
 
 ENFORCE_DEVICE_ID = True  # Can toggle off for testing or relaxed events
 
+eastern = pytz.timezone("US/Eastern")
+
 # mail server configuration
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
@@ -67,6 +69,7 @@ def login_required(f):
 
 def get_eastern_now():
     return datetime.now(pytz.timezone("US/Eastern"))
+
 
 @app.route("/")
 def landing_page():
@@ -569,7 +572,8 @@ def student_interface(event_id):
     if len(stop_time.split(':')) == 2:
         stop_time += ":00"  # Convert HH:MM ➜ HH:MM:SS
 
-    event_end = datetime.strptime(f"{event_date} {stop_time}", "%Y-%m-%d %H:%M:%S").isoformat()
+    event_end_naive = datetime.strptime(f"{event_date} {stop_time}", "%Y-%m-%d %H:%M:%S")
+    event_end = eastern.localize(event_end_naive).isoformat()
 
     return render_template("student_checkin.html", eventName=event_name, eventEnd=event_end)
 
@@ -617,7 +621,8 @@ def resend_email():
 
     # Check cooldown
     if last_sent:
-        last_sent_time = pytz.timezone('US/Eastern').localize(datetime.strptime(last_sent, "%Y-%m-%d %H:%M:%S"))
+        last_sent_naive = datetime.strptime(last_sent, "%Y-%m-%d %H:%M:%S")
+        last_sent_time = eastern.localize(last_sent_naive)
         if get_eastern_now() < last_sent_time + timedelta(seconds=COOLDOWN_SECONDS):
             remaining = (last_sent_time + timedelta(seconds=COOLDOWN_SECONDS)) - get_eastern_now()
             return jsonify({
@@ -722,9 +727,6 @@ def submit_student_checkin():
         if not event_row:
             conn.close()
             return jsonify({'status': 'error', 'message': 'Event not found'}), 404
-
-        event_start = datetime.strptime(f"{event_row['eventDate']} {event_row['startTime']}", "%Y-%m-%d %H:%M")
-        late_cutoff = event_start + timedelta(minutes=10)
 
         responses = []
 
@@ -1064,10 +1066,7 @@ def submit_event():
         # Validate single event date
         if not is_recurring:
             event_date_obj = datetime.strptime(event_date, "%Y-%m-%d").date()
-            eastern = pytz.timezone("US/Eastern")
-            event_datetime_naive = datetime.combine(event_date_obj, start_time_obj)
-            event_datetime = eastern.localize(event_datetime_naive)
-
+            event_datetime = datetime.combine(event_date_obj, start_time_obj)
             now = get_eastern_now()
             if event_datetime < now:
                 flash("❌ You cannot create an event in the past.", "error")
@@ -1346,8 +1345,10 @@ def edit_event(event_id):
 
         # Combine datetime
         now = get_eastern_now()
-        start_dt = datetime.strptime(f"{date} {start_time}", "%Y-%m-%d %H:%M")
-        stop_dt = datetime.strptime(f"{date} {stop_time}", "%Y-%m-%d %H:%M")
+        start_dt_naive = datetime.strptime(f"{date} {start_time}", "%Y-%m-%d %H:%M")
+        stop_dt_naive = datetime.strptime(f"{date} {stop_time}", "%Y-%m-%d %H:%M")
+        start_dt = eastern.localize(start_dt_naive)
+        stop_dt = eastern.localize(stop_dt_naive)
 
         # Fetch event again for re-rendering if needed
         event = cursor.execute("""
