@@ -483,17 +483,30 @@ def account():
     return render_template('account.html', user=user)
 
 
-# Function to generate (or retrieve) QR code
+# # Function to generate (or retrieve) QR code
+# def get_or_create_qr_code(event_id):
+#     qr_code_path = os.path.join(QR_CODE_FOLDER, f"event_{event_id}.png")
+#
+#     if os.path.exists(qr_code_path):
+#         return qr_code_path  # Return existing QR code
+#
+#     # Generate new QR code that directs to the student interface
+#     qr_url = f"http://127.0.0.1:5000/student_checkin/{event_id}"  # temp - Boray was using on his laptop
+#     # qr_url = f"http://192.168.1.100:5000/student_checkin/{event_id}" #temp - Joie was using this IP to test on her local network (address for home network)
+#     # qr_url = f"http://172.20.10.12:5000/student_checkin/{event_id}" #temp - Joie was using this IP to test on her local network (address for phone hotspot)
+#     qr = segno.make(qr_url)
+#     qr.save(qr_code_path, scale=10)
+#
+#     return qr_code_path
 def get_or_create_qr_code(event_id):
     qr_code_path = os.path.join(QR_CODE_FOLDER, f"event_{event_id}.png")
 
     if os.path.exists(qr_code_path):
         return qr_code_path  # Return existing QR code
 
-    # Generate new QR code that directs to the student interface
-    qr_url = f"http://127.0.0.1:5000/student_checkin/{event_id}"  # temp - Boray was using on his laptop
-    # qr_url = f"http://192.168.1.100:5000/student_checkin/{event_id}" #temp - Joie was using this IP to test on her local network (address for home network)
-    # qr_url = f"http://172.20.10.12:5000/student_checkin/{event_id}" #temp - Joie was using this IP to test on her local network (address for phone hotspot)
+    # Use the deployed public URL on Render
+    qr_url = f"https://attendance-verification-system.onrender.com/student_checkin/{event_id}"
+
     qr = segno.make(qr_url)
     qr.save(qr_code_path, scale=10)
 
@@ -1516,5 +1529,15 @@ def event_info(event_id):
     # Pass current datetime as a string to match format in Jinja
     return render_template("event_info.html", event=event, now=datetime.now().strftime("%Y-%m-%d %H:%M"))
 
+@app.route('/init-db')
+def init_db_route():
+    from init_db import create_tables, seed_professors_and_courses
+
+    create_tables()
+    seed_professors_and_courses()
+
+    return "Database initialized!"
+
 if __name__ == "__main__":
     app.run(debug=True)
+
