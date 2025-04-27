@@ -14,6 +14,7 @@ from passlib.hash import sha256_crypt
 from functools import wraps
 from uuid import uuid4
 import logging
+import pytz
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -63,6 +64,9 @@ def login_required(f):
         return f(*args, **kwargs)
 
     return decorated_function
+
+def get_eastern_now():
+    return datetime.now(pytz.timezone("US/Eastern"))
 
 @app.route("/")
 def landing_page():
@@ -198,7 +202,7 @@ def submit_logout():
 @login_required
 def get_dashboard_data():
     user_id = session["user_id"]
-    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    now = get_eastern_now().strftime("%Y-%m-%dT%H:%M:%S")
 
     # Get pagination args
     per_page = 5
@@ -249,7 +253,7 @@ def get_dashboard_data():
 @login_required
 def dashboard():
     user_id = session["user_id"]
-    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    now = get_eastern_now().strftime("%Y-%m-%dT%H:%M:%S")
     per_page = 5  # how many events per page
 
     # Get current page numbers from URL
@@ -330,7 +334,7 @@ def dashboard_past_partial():
 
 def render_partial_events(section):
     user_id = session["user_id"]
-    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    now = get_eastern_now().strftime("%Y-%m-%dT%H:%M:%S")
     per_page = 5
 
     try:
@@ -614,8 +618,8 @@ def resend_email():
     # Check cooldown
     if last_sent:
         last_sent_time = datetime.strptime(last_sent, "%Y-%m-%d %H:%M:%S")
-        if datetime.now() < last_sent_time + timedelta(seconds=COOLDOWN_SECONDS):
-            remaining = (last_sent_time + timedelta(seconds=COOLDOWN_SECONDS)) - datetime.now()
+        if get_eastern_now() < last_sent_time + timedelta(seconds=COOLDOWN_SECONDS):
+            remaining = (last_sent_time + timedelta(seconds=COOLDOWN_SECONDS)) - get_eastern_now()
             return jsonify({
                 'error': f'Please wait {int(remaining.total_seconds())} more seconds before resending.'
             }), 429
@@ -628,7 +632,7 @@ def resend_email():
 
     try:
         mail.send(msg)
-        session['last_verification_email_sent'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        session['last_verification_email_sent'] = get_eastern_now().strftime("%Y-%m-%d %H:%M:%S")
         return jsonify({'message': 'Verification code resent.'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -762,7 +766,7 @@ def submit_end_location():
         lastName = data.get('lastName', '').strip()
         scannedEventID = data.get('scannedEventID')
         endLocation = str(data.get('endLocation', '')).strip()
-        endTime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        endTime = get_eastern_now().strftime('%Y-%m-%d %H:%M:%S')
 
         # Validate input
         if not all([email, lastName, scannedEventID, endLocation]):
@@ -1061,7 +1065,7 @@ def submit_event():
         if not is_recurring:
             event_date_obj = datetime.strptime(event_date, "%Y-%m-%d").date()
             event_datetime = datetime.combine(event_date_obj, start_time_obj)
-            now = datetime.now()
+            now = get_eastern_now()
             if event_datetime < now:
                 flash("❌ You cannot create an event in the past.", "error")
                 return redirect(url_for("events"))
@@ -1338,7 +1342,7 @@ def edit_event(event_id):
         lat, lng = map(float, latlng.split(","))
 
         # Combine datetime
-        now = datetime.now()
+        now = get_eastern_now()
         start_dt = datetime.strptime(f"{date} {start_time}", "%Y-%m-%d %H:%M")
         stop_dt = datetime.strptime(f"{date} {stop_time}", "%Y-%m-%d %H:%M")
 
@@ -1527,7 +1531,7 @@ def event_info(event_id):
         return "Event not found", 404
 
     # Pass current datetime as a string to match format in Jinja
-    return render_template("event_info.html", event=event, now=datetime.now().strftime("%Y-%m-%d %H:%M"))
+    return render_template("event_info.html", event=event, now=get_eastern_now().strftime("%Y-%m-%d %H:%M"))
 
 @app.route('/init-db')
 def init_db_route():
