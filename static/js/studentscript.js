@@ -46,6 +46,16 @@ document.addEventListener("DOMContentLoaded", function () {
         scannedEventID: ''
     };
 
+    // Check if event end time has passed
+    let eventEndTime = new Date(document.body.getAttribute("data-event-end")); // ISO string format
+    let now = new Date();
+
+    if (eventEndTime && now > eventEndTime) {
+        // Event has ended
+        showFrame(5); // Frame 6 index (0-based)
+        return;
+    }
+
     if (!cachedStudent.scannedEventID) {
         const pathParts = window.location.pathname.split('/');
         if (pathParts.includes("student_checkin")) {
