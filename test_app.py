@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import patch, MagicMock
 import json
+import uuid
 from app import app, get_db_connection
 
 class AttendanceAppTestCase(unittest.TestCase):
@@ -8,7 +9,19 @@ class AttendanceAppTestCase(unittest.TestCase):
         self.app = app.test_client()
         self.app.testing = True
 
-    def register_user(self, email="testuser@example.com"):
+        # Seed test professor to database for test reliability
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT OR IGNORE INTO professors (professor_name, professor_email)
+            VALUES (?, ?)
+        """, ("Dr. Demo Tester", "your.email@domain.com"))
+        conn.commit()
+        conn.close()
+
+    def register_user(self, email=None):
+        if not email:
+            email = f"testuser_{uuid.uuid4().hex[:8]}@example.com"
         return self.app.post("/submit_signup", json={
             "first_name": "Test",
             "last_name": "User",
@@ -23,7 +36,7 @@ class AttendanceAppTestCase(unittest.TestCase):
         })
 
     def test_signup_and_login(self):
-        email = "newtestuser@example.com"
+        email = f"newtestuser_{uuid.uuid4().hex[:8]}@example.com"
         response = self.register_user(email)
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.data)
@@ -48,32 +61,44 @@ class AttendanceAppTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"<!DOCTYPE html", response.data)
 
-    """
-    Test student check-in functionality.
-    """
-    def checkin_student(self):
-        return self.app.post('/submit_student_checkin', json={
-            'firstName': 'Test',
-            'lastName': 'User',
-            'email': 'testuser@example.com',
-            'scannedEventID': '1',
-            'studentLocation': 'Test Location',
-            'deviceId': '12345',
-            'courses': [
-                {
-                    'className': 'Test Course',
-                    'professorName': 'Test Professor'
-                }
-            ]
-        })
-    
     def test_student_checkin(self):
-        response = self.checkin_student()
-        self.assertEqual(response.status_code, 200)
+        with self.app as client:
+            email = f"student_{uuid.uuid4().hex[:8]}@example.com"
+            device_id = uuid.uuid4().hex[:12]  # randomized to avoid conflicts
 
-        data = response.get_json()
-        self.assertIsNotNone(data)
-        self.assertEqual(data['status'], 'success')
+            response = client.post('/submit_student_checkin', json={
+                'firstName': 'Test',
+                'lastName': 'User',
+                'email': email,
+                'scannedEventID': '1',
+                'studentLocation': 'Test Location',
+                'deviceId': device_id,
+                'courses': [
+                    {
+                        'className': 'Test Course',
+                        'professorName': 'Dr. Demo Tester'
+                    }
+                ]
+            })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertIsNotNone(data)
+            self.assertEqual(data['status'], 'success')
+
+    def test_demo_professor_exists(self):
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        result = cursor.execute("SELECT * FROM professors WHERE professor_email = ?", ("your.email@domain.com",)).fetchone()
+        conn.close()
+        self.assertIsNotNone(result)
+        self.assertEqual(result["professor_name"], "Dr. Demo Tester")
+
+    def test_search_professors_api(self):
+        response = self.app.get('/search_professors?query=Demo')
+        self.assertEqual(response.status_code, 200)
+        results = response.get_json()
+        self.assertTrue(any("Dr. Demo Tester" in r for r in results))
 
 if __name__ == '__main__':
     unittest.main()

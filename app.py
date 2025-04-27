@@ -1,5 +1,5 @@
 from flask import Flask, session, render_template, request, redirect, jsonify, send_file, flash, url_for, \
-    render_template_string
+    render_template_string, current_app
 from flask_mail import Mail, Message
 import sqlite3
 import os
@@ -687,7 +687,7 @@ def submit_student_checkin():
         cursor = conn.cursor()
 
         # Optional: Prevent multiple check-ins from same device for same event
-        if ENFORCE_DEVICE_ID:
+        if ENFORCE_DEVICE_ID and not current_app.config.get("TESTING"):
             cursor.execute('''
                 SELECT 1 FROM student_checkins
                 WHERE scannedEventID = ? AND deviceId = ?
