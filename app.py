@@ -14,6 +14,7 @@ from passlib.hash import sha256_crypt
 from functools import wraps
 from uuid import uuid4
 import logging
+import pytz
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -26,6 +27,8 @@ QR_CODE_FOLDER = "qr_codes"
 app.secret_key = os.urandom(24)
 
 ENFORCE_DEVICE_ID = True  # Can toggle off for testing or relaxed events
+
+eastern = pytz.timezone("US/Eastern")
 
 # mail server configuration
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
@@ -63,6 +66,10 @@ def login_required(f):
         return f(*args, **kwargs)
 
     return decorated_function
+
+def get_eastern_now():
+    return datetime.now(pytz.timezone("US/Eastern"))
+
 
 @app.route("/")
 def landing_page():
@@ -198,7 +205,7 @@ def submit_logout():
 @login_required
 def get_dashboard_data():
     user_id = session["user_id"]
-    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    now = get_eastern_now().strftime("%Y-%m-%dT%H:%M:%S")
 
     # Get pagination args
     per_page = 5
@@ -249,7 +256,7 @@ def get_dashboard_data():
 @login_required
 def dashboard():
     user_id = session["user_id"]
-    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    now = get_eastern_now().strftime("%Y-%m-%dT%H:%M:%S")
     per_page = 5  # how many events per page
 
     # Get current page numbers from URL
@@ -330,7 +337,7 @@ def dashboard_past_partial():
 
 def render_partial_events(section):
     user_id = session["user_id"]
-    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    now = get_eastern_now().strftime("%Y-%m-%dT%H:%M:%S")
     per_page = 5
 
     try:
@@ -483,20 +490,15 @@ def account():
     return render_template('account.html', user=user)
 
 
-# Function to generate (or retrieve) QR code
-def get_or_create_qr_code(event_id):
+def get_or_create_qr_code(event_id, force=False):
     qr_code_path = os.path.join(QR_CODE_FOLDER, f"event_{event_id}.png")
 
-    if os.path.exists(qr_code_path):
-        return qr_code_path  # Return existing QR code
+    if not force and os.path.exists(qr_code_path):
+        return qr_code_path
 
-    # Generate new QR code that directs to the student interface
-    qr_url = f"http://127.0.0.1:5000/student_checkin/{event_id}"  # temp - Boray was using on his laptop
-    # qr_url = f"http://192.168.1.100:5000/student_checkin/{event_id}" #temp - Joie was using this IP to test on her local network (address for home network)
-    # qr_url = f"http://172.20.10.12:5000/student_checkin/{event_id}" #temp - Joie was using this IP to test on her local network (address for phone hotspot)
+    qr_url = f"https://attendance-verification-system.onrender.com/student_checkin/{event_id}"
     qr = segno.make(qr_url)
     qr.save(qr_code_path, scale=10)
-
     return qr_code_path
 
 
@@ -552,7 +554,8 @@ def student_interface(event_id):
     if len(stop_time.split(':')) == 2:
         stop_time += ":00"  # Convert HH:MM ➜ HH:MM:SS
 
-    event_end = datetime.strptime(f"{event_date} {stop_time}", "%Y-%m-%d %H:%M:%S").isoformat()
+    event_end_naive = datetime.strptime(f"{event_date} {stop_time}", "%Y-%m-%d %H:%M:%S")
+    event_end = eastern.localize(event_end_naive).isoformat()
 
     return render_template("student_checkin.html", eventName=event_name, eventEnd=event_end)
 
@@ -600,9 +603,10 @@ def resend_email():
 
     # Check cooldown
     if last_sent:
-        last_sent_time = datetime.strptime(last_sent, "%Y-%m-%d %H:%M:%S")
-        if datetime.now() < last_sent_time + timedelta(seconds=COOLDOWN_SECONDS):
-            remaining = (last_sent_time + timedelta(seconds=COOLDOWN_SECONDS)) - datetime.now()
+        last_sent_naive = datetime.strptime(last_sent, "%Y-%m-%d %H:%M:%S")
+        last_sent_time = eastern.localize(last_sent_naive)
+        if get_eastern_now() < last_sent_time + timedelta(seconds=COOLDOWN_SECONDS):
+            remaining = (last_sent_time + timedelta(seconds=COOLDOWN_SECONDS)) - get_eastern_now()
             return jsonify({
                 'error': f'Please wait {int(remaining.total_seconds())} more seconds before resending.'
             }), 429
@@ -615,7 +619,7 @@ def resend_email():
 
     try:
         mail.send(msg)
-        session['last_verification_email_sent'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        session['last_verification_email_sent'] = get_eastern_now().strftime("%Y-%m-%d %H:%M:%S")
         return jsonify({'message': 'Verification code resent.'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -706,9 +710,6 @@ def submit_student_checkin():
             conn.close()
             return jsonify({'status': 'error', 'message': 'Event not found'}), 404
 
-        event_start = datetime.strptime(f"{event_row['eventDate']} {event_row['startTime']}", "%Y-%m-%d %H:%M")
-        late_cutoff = event_start + timedelta(minutes=10)
-
         responses = []
 
         for entry in course_entries:
@@ -749,7 +750,7 @@ def submit_end_location():
         lastName = data.get('lastName', '').strip()
         scannedEventID = data.get('scannedEventID')
         endLocation = str(data.get('endLocation', '')).strip()
-        endTime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        endTime = get_eastern_now().strftime('%Y-%m-%d %H:%M:%S')
 
         # Validate input
         if not all([email, lastName, scannedEventID, endLocation]):
@@ -1020,6 +1021,19 @@ def force_resend_email(event_id):
     send_professor_emails(event_id)
     return redirect(url_for("send_email_summary", event_id=event_id))
 
+from flask import request, redirect, url_for, flash, session, render_template
+from functools import wraps
+from datetime import datetime, timedelta, date
+from uuid import uuid4
+import pytz
+import logging
+
+# Make sure to define this timezone utility at the top of your file
+EASTERN = pytz.timezone("US/Eastern")
+
+def get_eastern_now():
+    return datetime.now(EASTERN)
+
 @app.route("/submit_event", methods=["POST"])
 @login_required
 def submit_event():
@@ -1047,8 +1061,9 @@ def submit_event():
         # Validate single event date
         if not is_recurring:
             event_date_obj = datetime.strptime(event_date, "%Y-%m-%d").date()
-            event_datetime = datetime.combine(event_date_obj, start_time_obj)
-            now = datetime.now()
+            event_datetime_naive = datetime.combine(event_date_obj, start_time_obj)
+            event_datetime = EASTERN.localize(event_datetime_naive)
+            now = get_eastern_now()
             if event_datetime < now:
                 flash("❌ You cannot create an event in the past.", "error")
                 return redirect(url_for("events"))
@@ -1061,7 +1076,7 @@ def submit_event():
             recurrence_start_obj = datetime.strptime(recurrence_start, "%Y-%m-%d").date()
             recurrence_end_obj = datetime.strptime(recurrence_end, "%Y-%m-%d").date()
 
-            if recurrence_start_obj < date.today():
+            if recurrence_start_obj < get_eastern_now().date():
                 flash("❌ Recurrence start date cannot be in the past.", "error")
                 return redirect(url_for("events"))
 
@@ -1075,34 +1090,28 @@ def submit_event():
         return redirect(url_for("events"))
 
     recurrence_type = request.form.get("recurrence", "none")
-    # 🔒 Block if recurrence type is 'none' but user selected recurring (unless they confirmed)
     if is_recurring and recurrence_type == "none" and "recurrence_warning_acknowledged" not in request.form:
         logging.warning("❌ Recurring selected but recurrence type is 'none'. Blocking creation.")
         flash(
             "❌ Event was not saved. You selected 'Recurring' but chose 'Does not repeat'. Please select a repeat type and try again.",
             "error")
         return redirect(url_for("events"))
+
     recurrence_start = request.form.get("recurrence_start_date")
     recurrence_end = request.form.get("recurrence_end_date")
     professor_id = session.get("user_id")
 
-    logging.debug(f"Event Name: {event_name}")
-    logging.debug(f"Recurring: {is_recurring}, Type: {recurrence_type}")
-    logging.debug(f"Recurrence Range: {recurrence_start} to {recurrence_end}")
-
-    # Validate and parse coordinates
+    # Parse coordinates
     try:
         lat, lng = map(float, event_location.split(","))
-        logging.debug(f"Parsed location: {lat}, {lng}")
     except Exception as e:
-        logging.error(f"❌ Invalid location format: {e}")
         flash("❌ Invalid location format.", "error")
+        logging.error(f"Invalid location: {e}")
         return redirect(url_for("events"))
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Verify that this location exists in places table
     cursor.execute("""
         SELECT * FROM places 
         WHERE ROUND(latitude, 6) = ROUND(?, 6) AND ROUND(longitude, 6) = ROUND(?, 6)
@@ -1110,44 +1119,25 @@ def submit_event():
     place = cursor.fetchone()
 
     if not place:
-        logging.warning("❌ Location does not match any known place.")
         flash("❌ Selected location does not match a saved place.", "error")
         return redirect(url_for("events"))
 
-    # Validate time logic
     if start_time >= stop_time:
-        logging.warning("Start time >= stop time")
         flash("❌ End time must be later than start time.", "error")
-        return redirect(url_for("events"))
-
-    # Verify the place exists in the DB
-    cursor.execute("""
-        SELECT * FROM places 
-        WHERE ROUND(latitude, 6) = ROUND(?, 6) AND ROUND(longitude, 6) = ROUND(?, 6)
-    """, (lat, lng))
-    place = cursor.fetchone()
-
-    if not place:
-        conn.close()
-        logging.error("❌ Location does not match a saved place")
-        flash("❌ Selected location does not match any saved place.", "error")
         return redirect(url_for("events"))
 
     # --- RECURRING EVENT HANDLING ---
     if is_recurring:
-        logging.debug("🔄 Processing as RECURRING event")
         try:
             start_date = datetime.strptime(recurrence_start, "%Y-%m-%d")
             end_date = datetime.strptime(recurrence_end, "%Y-%m-%d")
             assert start_date <= end_date
         except Exception as e:
             conn.close()
-            logging.error(f"❌ Recurrence date error: {e}")
             flash("❌ Invalid recurrence date range.", "error")
             return redirect(url_for("events"))
 
         recurrence_group = str(uuid4())
-        logging.debug(f"Recurrence Group ID: {recurrence_group}")
         current_date = start_date
 
         while current_date <= end_date:
@@ -1169,10 +1159,8 @@ def submit_event():
             ))
 
             event_id = cursor.lastrowid
-            logging.debug(f"✅ Inserted recurring event for {current_date.date()} (Event ID: {event_id})")
             get_or_create_qr_code(event_id)
 
-            # Advance to next occurrence
             if recurrence_type == "daily":
                 current_date += timedelta(days=1)
             elif recurrence_type == "weekly":
@@ -1188,21 +1176,18 @@ def submit_event():
 
         conn.commit()
         conn.close()
-        logging.debug("✅ All recurring events committed successfully")
         return redirect(url_for("dashboard", recurring_created=1))
 
     # --- SINGLE EVENT HANDLING ---
     else:
-        logging.debug("📅 Processing as single event")
         try:
             event_date_obj = datetime.strptime(event_date, "%Y-%m-%d")
         except Exception as e:
             conn.close()
-            logging.error(f"❌ Invalid event date: {e}")
             flash("❌ Invalid event date.", "error")
             return redirect(url_for("events"))
 
-        # Check for duplicate event at same time/location
+        # Prevent duplicates
         cursor.execute("""
             SELECT * FROM events 
             WHERE eventDate = ? 
@@ -1221,7 +1206,6 @@ def submit_event():
 
         if cursor.fetchone():
             conn.close()
-            logging.warning("❌ Duplicate detected at this time and location")
             flash("❌ Another event is already scheduled at this time and location.", "error")
             return redirect(url_for("events"))
 
@@ -1235,8 +1219,6 @@ def submit_event():
         event_id = cursor.lastrowid
         conn.commit()
         conn.close()
-        logging.debug(f"✅ Event {event_id} inserted successfully")
-
         get_or_create_qr_code(event_id)
         return redirect(url_for("dashboard", created=1))
 
@@ -1325,9 +1307,11 @@ def edit_event(event_id):
         lat, lng = map(float, latlng.split(","))
 
         # Combine datetime
-        now = datetime.now()
-        start_dt = datetime.strptime(f"{date} {start_time}", "%Y-%m-%d %H:%M")
-        stop_dt = datetime.strptime(f"{date} {stop_time}", "%Y-%m-%d %H:%M")
+        now = get_eastern_now()
+        start_dt_naive = datetime.strptime(f"{date} {start_time}", "%Y-%m-%d %H:%M")
+        stop_dt_naive = datetime.strptime(f"{date} {stop_time}", "%Y-%m-%d %H:%M")
+        start_dt = eastern.localize(start_dt_naive)
+        stop_dt = eastern.localize(stop_dt_naive)
 
         # Fetch event again for re-rendering if needed
         event = cursor.execute("""
@@ -1514,7 +1498,35 @@ def event_info(event_id):
         return "Event not found", 404
 
     # Pass current datetime as a string to match format in Jinja
-    return render_template("event_info.html", event=event, now=datetime.now().strftime("%Y-%m-%d %H:%M"))
+    return render_template("event_info.html", event=event, now=get_eastern_now().strftime("%Y-%m-%d %H:%M"))
 
-if __name__ == "__main__":
-    app.run(debug=True)
+@app.route('/init-db')
+def init_db_route():
+    from init_db import create_tables, seed_professors_and_courses
+
+    create_tables()
+    seed_professors_and_courses()
+
+    return "Database initialized!"
+
+@app.route("/debug/events")
+def debug_events():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT eventID, eventName, eventDate, startTime, stopTime FROM events ORDER BY eventID DESC")
+    rows = cursor.fetchall()
+    conn.close()
+
+    html = "<h2>Events in DB:</h2>"
+    if not rows:
+        html += "<p>No events found.</p>"
+    else:
+        html += "<ul>"
+        for row in rows:
+            html += f"<li><strong>ID {row['eventID']}</strong>: {row['eventName']} on {row['eventDate']} from {row['startTime']} to {row['stopTime']}</li>"
+        html += "</ul>"
+
+    return html
+
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0')
