@@ -1,28 +1,4 @@
 document.addEventListener("DOMContentLoaded", function () {
-    const pathParts = window.location.pathname.split('/');
-    const eventIdFromUrl = pathParts.includes("student_checkin") ? pathParts[pathParts.indexOf("student_checkin") + 1] : null;
-
-    const isColdQR = eventIdFromUrl && !sessionStorage.getItem("cachedStudent");
-
-    if (isColdQR) {
-        const freshCache = {
-            email: '',
-            lastName: '',
-            scannedEventID: eventIdFromUrl,
-            courses: [],
-            professorNames: [],
-            verified: false
-        };
-
-        sessionStorage.setItem("cachedStudent", JSON.stringify(freshCache));
-        sessionStorage.setItem("frameState", "0");
-        sessionStorage.setItem("emailVerified", "false");
-        sessionStorage.removeItem("studentFormData");  // optional wipe
-
-        showFrame(0); // Always show Frame 1 on cold open
-        return; // ⬅️ Stop here — let student begin fresh flow
-    }
-
     const allFrames = document.getElementsByTagName("section");
     const table = document.getElementById("tableBody");
     const userAgreement = document.getElementById("userAgreement");
@@ -64,6 +40,12 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
 
+    let cachedStudent = JSON.parse(sessionStorage.getItem("cachedStudent")) || {
+        email: '',
+        lastName: '',
+        scannedEventID: ''
+    };
+
     // Check if event end time has passed
     let eventEndTime = new Date(document.body.getAttribute("data-event-end")); // ISO string format
     let now = new Date();
@@ -72,6 +54,14 @@ document.addEventListener("DOMContentLoaded", function () {
         // Event has ended
         showFrame(5); // Frame 6 index (0-based)
         return;
+    }
+
+    if (!cachedStudent.scannedEventID) {
+        const pathParts = window.location.pathname.split('/');
+        if (pathParts.includes("student_checkin")) {
+            cachedStudent.scannedEventID = pathParts[pathParts.indexOf("student_checkin") + 1];
+            sessionStorage.setItem("cachedStudent", JSON.stringify(cachedStudent));
+        }
     }
 
     function showFrame(frameIndex) {
@@ -616,4 +606,3 @@ document.addEventListener("DOMContentLoaded", function () {
             });
         });
 });
-

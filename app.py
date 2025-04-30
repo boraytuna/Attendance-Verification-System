@@ -687,6 +687,9 @@ def submit_student_checkin():
         except ValueError:
             return jsonify({'status': 'error', 'message': 'Invalid scannedEventID'}), 400
 
+        # Explicitly define checkinTime here (CRITICAL FIX)
+        checkinTime = get_eastern_now().strftime('%Y-%m-%d %H:%M:%S')
+
         conn = get_db_connection()
         cursor = conn.cursor()
 
@@ -719,15 +722,15 @@ def submit_student_checkin():
             if not className or not professorName:
                 continue
 
-            # Insert new check-in record
+            # Insert new check-in record (with explicit checkinTime included)
             cursor.execute('''
                 INSERT INTO student_checkins (
                     firstName, lastName, email, classForExtraCredit,
-                    professorForExtraCredit, scannedEventID, studentLocation, deviceId
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    professorForExtraCredit, scannedEventID, studentLocation, deviceId, checkinTime
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 firstName, lastName, email, className,
-                professorName, scannedEventID, studentLocation, deviceId
+                professorName, scannedEventID, studentLocation, deviceId, checkinTime
             ))
         conn.commit()
         conn.close()

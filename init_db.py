@@ -60,9 +60,9 @@ def create_tables():
             professorForExtraCredit TEXT NOT NULL,
             scannedEventID INTEGER NOT NULL,
             studentLocation TEXT NOT NULL,
-            checkinTime DATETIME DEFAULT CURRENT_TIMESTAMP,
+            checkinTime DATETIME,
             endLocation TEXT,
-            endTime DATETIME DEFAULT CURRENT_TIMESTAMP,
+            endTime DATETIME,
             FOREIGN KEY (scannedEventID) REFERENCES events(eventID)
         )
     ''')
