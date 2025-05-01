@@ -17,6 +17,27 @@ document.addEventListener("DOMContentLoaded", function () {
     let frameState = sessionStorage.getItem("frameState");
     let emailVerified = sessionStorage.getItem("emailVerified") === "true";
 
+    // 🧠 Use localStorage fallback if sessionStorage is gone
+    if (!frameState) {
+        const payload = localStorage.getItem("student_checkin_payload");
+        if (payload) {
+            try {
+                const parsed = JSON.parse(payload);
+                if (parsed && parsed.email && parsed.scannedEventID) {
+                    frameState = "3"; // Assume Frame 4: student already checked in and should wait to submit end location
+                    sessionStorage.setItem("frameState", "3");
+                    sessionStorage.setItem("cachedStudent", JSON.stringify({
+                        email: parsed.email,
+                        lastName: parsed.lastName,
+                        scannedEventID: parsed.scannedEventID
+                    }));
+                }
+            } catch (e) {
+                console.warn("Could not parse localStorage payload for frameState fallback.");
+            }
+        }
+    }
+
     // 👇 Enhanced frame logic — supports Frame 2 restoration
     let resendStarted = sessionStorage.getItem("resendTimerStarted") === "true";
     let resendStartTime = parseInt(sessionStorage.getItem("resendStartTime") || "0", 10);
@@ -29,8 +50,6 @@ document.addEventListener("DOMContentLoaded", function () {
         startResendCountdown(remaining);
     } else if (frameState === "2" && emailVerified) {
         showFrame(2); // Frame 3
-    } else if (frameState === "3") {
-        showFrame(3); // Frame 4
     } else if (frameState === "4") {
         showFrame(4); // Frame 5
     } else if (frameState === "5") {
@@ -61,6 +80,21 @@ document.addEventListener("DOMContentLoaded", function () {
         if (pathParts.includes("student_checkin")) {
             cachedStudent.scannedEventID = pathParts[pathParts.indexOf("student_checkin") + 1];
             sessionStorage.setItem("cachedStudent", JSON.stringify(cachedStudent));
+        }
+    }
+
+    // 🔁 Restore cached student data if user returns later (like hours later)
+    const savedPayload = localStorage.getItem("student_checkin_payload");
+    if (savedPayload) {
+        try {
+            const parsed = JSON.parse(savedPayload);
+            if (parsed && parsed.email && parsed.lastName && parsed.scannedEventID) {
+                cachedStudent.email = parsed.email;
+                cachedStudent.lastName = parsed.lastName;
+                cachedStudent.scannedEventID = parsed.scannedEventID;
+            }
+        } catch (e) {
+            console.warn("Failed to parse saved check-in payload", e);
         }
     }
 
@@ -240,12 +274,15 @@ document.addEventListener("DOMContentLoaded", function () {
             }
         });
 
+        const checkinTime = new Date().toISOString();
+
         let formData = {
             firstName: cachedStudent.firstName,
             lastName: cachedStudent.lastName,
             email: cachedStudent.email,
             scannedEventID: cachedStudent.scannedEventID,
             studentLocation: capturedStudentLocation,
+            checkinTime: checkinTime, // ✅ add timestamp
             deviceId: getDeviceId(),
             courses: courseData
         };
@@ -265,13 +302,14 @@ document.addEventListener("DOMContentLoaded", function () {
             .then(data => {
                 if (data.status === "success") {
                     alert("Check-in successful!");
+
+                    localStorage.setItem("student_checkin_payload", JSON.stringify(formData));
                     sessionStorage.setItem("cachedStudent", JSON.stringify(cachedStudent));
+                    sessionStorage.setItem("frameState", "3");
                     document.getElementById("errorMessage").style.display = "none";
-                    sessionStorage.setItem("frameState", "3"); // ✅ Frame 4
-                    showFrame(3); // ✅ Frame 4 (the “wait until end” screen)
+                    showFrame(3); // Frame 4: wait for event to end
                 } else {
-                    const reason = data.message || "Check-in failed. Please try again.";
-                    showError(reason);
+                    showError(data.message || "Check-in failed. Please try again.");
                 }
             })
             .catch(async error => {
@@ -306,6 +344,8 @@ document.addEventListener("DOMContentLoaded", function () {
             lastName,
             scannedEventID,
             endLocation: capturedEndLocation,
+            endTime: new Date().toISOString(), // ✅ add timestamp
+            deviceId: getDeviceId()             // ✅ include for consistency
         };
 
         fetch('/submit_end_location', {
@@ -320,8 +360,8 @@ document.addEventListener("DOMContentLoaded", function () {
             .then(data => {
                 if (data.status === "success") {
                     alert("End location submitted successfully!");
-                    sessionStorage.setItem("frameState", "4"); // ✅ Now saves Frame 5
-                    showFrame(4); // ✅ Loads Frame 5 on success
+                    sessionStorage.setItem("frameState", "4");
+                    showFrame(4); // Frame 5: confirmation
                 } else {
                     showError(data.message || "Submission failed.");
                 }
