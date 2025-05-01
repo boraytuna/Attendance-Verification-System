@@ -676,6 +676,7 @@ def submit_student_checkin():
         email = data.get('email', '').strip()
         scannedEventID = data.get('scannedEventID')
         studentLocation = data.get('studentLocation', '').strip()
+        checkinTime = data.get("checkinTime")
         deviceId = data.get('deviceId')
         course_entries = data.get('courses', [])
 
@@ -686,9 +687,6 @@ def submit_student_checkin():
             scannedEventID = int(scannedEventID)
         except ValueError:
             return jsonify({'status': 'error', 'message': 'Invalid scannedEventID'}), 400
-
-        # Explicitly define checkinTime here (CRITICAL FIX)
-        checkinTime = get_eastern_now().strftime('%Y-%m-%d %H:%M:%S')
 
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -753,10 +751,11 @@ def submit_end_location():
         lastName = data.get('lastName', '').strip()
         scannedEventID = data.get('scannedEventID')
         endLocation = str(data.get('endLocation', '')).strip()
-        endTime = get_eastern_now().strftime('%Y-%m-%d %H:%M:%S')
+        endTime = data.get("endTime")
+        deviceId = data.get("deviceId")
 
-        # Validate input
-        if not all([email, lastName, scannedEventID, endLocation]):
+        # ✅ Validate input
+        if not all([email, lastName, scannedEventID, endLocation, deviceId]):
             return jsonify({'status': 'error', 'message': 'Missing required fields'}), 400
 
         try:
@@ -767,13 +766,13 @@ def submit_end_location():
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # Update all matching check-ins without an endLocation
+        # ✅ Update matching row that has no endLocation and same deviceId
         cursor.execute('''
             UPDATE student_checkins
             SET endLocation = ?, endTime = ?
-            WHERE email = ? AND scannedEventID = ? AND lastName = ?
+            WHERE email = ? AND scannedEventID = ? AND lastName = ? AND deviceId = ?
               AND (endLocation IS NULL OR endLocation = '')
-        ''', (endLocation, endTime, email, scannedEventID, lastName))
+        ''', (endLocation, endTime, email, scannedEventID, lastName, deviceId))
 
         updated_count = cursor.rowcount
         conn.commit()
