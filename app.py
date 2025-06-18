@@ -28,7 +28,10 @@ app.secret_key = os.urandom(24)
 
 ENFORCE_DEVICE_ID = True  # Can toggle off for testing or relaxed events
 
-eastern = pytz.timezone("US/Eastern")
+EASTERN = pytz.timezone("US/Eastern")
+
+def get_eastern_now():
+    return datetime.now(EASTERN)
 
 # mail server configuration
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
@@ -67,10 +70,6 @@ def login_required(f):
 
     return decorated_function
 
-def get_eastern_now():
-    return datetime.now(pytz.timezone("US/Eastern"))
-
-
 @app.route("/")
 def landing_page():
     """
@@ -79,7 +78,7 @@ def landing_page():
     Returns:
         the rendered landing page HTML template
     """
-    return render_template("landing_page.html")
+    return render_template("login_signup/landing_page.html")
 
 
 @app.route("/signup")
@@ -90,7 +89,7 @@ def signup():
     Returns:
         the rendered signup page HTML template
     """
-    return render_template("signup.html")
+    return render_template("login_signup/signup.html")
 
 
 @app.route("/submit_signup", methods=["POST"])
@@ -187,7 +186,7 @@ def login():
     Returns:
         the rendered login page HTML template
     """
-    return render_template("login.html")
+    return render_template("login_signup/login.html")
 
 
 @app.route("/submit_logout", methods=["POST"])
@@ -304,7 +303,7 @@ def dashboard():
 
     conn.close()
 
-    return render_template("dashboard.html",
+    return render_template("dashboard_management/dashboard.html",
                            current_events=current,
                            upcoming_events=upcoming,
                            past_events=past,
@@ -381,7 +380,7 @@ def render_partial_events(section):
     conn.close()
 
     return render_template_string("""
-        {% from 'macros.html' import render_table %}
+        {% from 'dashboard_management/macros.html' import render_table %}
         {{ render_table(events, section_name, page_var, total, per_page, current_page) }}
     """, events=paginated, section_name=section_name, page_var=page_var,
                                   total=len(all_rows), per_page=per_page, current_page=page)
@@ -395,7 +394,7 @@ def events():
     cursor.execute("SELECT * FROM events")
     events = cursor.fetchall()
     conn.close()
-    return render_template("events.html", events=events)
+    return render_template("event_management/events.html", events=events)
 
 
 # Route: Calendar Page
@@ -415,7 +414,7 @@ def calendar():
             'end': f"{event['eventDate']}T{event['stopTime']}",
         })
 
-    return render_template("calendar.html", events=event_list)
+    return render_template("calendar/calendar.html", events=event_list)
 
 
 # Route: Places Page
@@ -427,7 +426,7 @@ def places():
     cursor.execute("SELECT * FROM places")
     places = cursor.fetchall()
     conn.close()
-    return render_template("places.html", places=places)
+    return render_template("place_management/places.html", places=places)
 
 
 @app.route('/account', methods=['GET', 'POST'])
@@ -487,7 +486,7 @@ def account():
         return redirect(url_for('account'))
 
     conn.close()
-    return render_template('account.html', user=user)
+    return render_template('account_management/account.html', user=user)
 
 
 def get_or_create_qr_code(event_id, force=False):
@@ -532,7 +531,7 @@ def qr_display(event_id):
         flash("❌ Event not found.", "error")
         return redirect(url_for("dashboard"))
 
-    return render_template("qr_display.html", event=event, qr_url=url_for("serve_qr_code", event_id=event_id))
+    return render_template("event_management/qr_display.html", event=event, qr_url=url_for("serve_qr_code", event_id=event_id))
 
 
 # **Route: Student Interface**
@@ -546,7 +545,7 @@ def student_interface(event_id):
     result = cursor.fetchone()
 
     if not result:
-        return render_template("student_checkin.html", eventName="Event Not Found", eventEnd="2000-01-01T00:00:00")
+        return render_template("student_form/student_checkin.html", eventName="Event Not Found", eventEnd="2000-01-01T00:00:00")
 
     event_name, event_date, stop_time = result
 
@@ -555,9 +554,9 @@ def student_interface(event_id):
         stop_time += ":00"  # Convert HH:MM ➜ HH:MM:SS
 
     event_end_naive = datetime.strptime(f"{event_date} {stop_time}", "%Y-%m-%d %H:%M:%S")
-    event_end = eastern.localize(event_end_naive).isoformat()
+    event_end = EASTERN.localize(event_end_naive).isoformat()
 
-    return render_template("student_checkin.html", eventName=event_name, eventEnd=event_end)
+    return render_template("student_form/student_checkin.html", eventName=event_name, eventEnd=event_end)
 
 # **API Routes for Student Check-In Email Verification**
 @app.route('/verify_email', methods=['POST'])
@@ -604,7 +603,7 @@ def resend_email():
     # Check cooldown
     if last_sent:
         last_sent_naive = datetime.strptime(last_sent, "%Y-%m-%d %H:%M:%S")
-        last_sent_time = eastern.localize(last_sent_naive)
+        last_sent_time = EASTERN.localize(last_sent_naive)
         if get_eastern_now() < last_sent_time + timedelta(seconds=COOLDOWN_SECONDS):
             remaining = (last_sent_time + timedelta(seconds=COOLDOWN_SECONDS)) - get_eastern_now()
             return jsonify({
@@ -976,7 +975,7 @@ def send_email_summary(event_id):
 
     if not students:
         conn.close()
-        return render_template("email_confirmation.html",
+        return render_template("event_management/email_confirmation.html",
                                grouped_by_prof={},
                                event_id=event_id,
                                show_send_button=False,
@@ -1003,7 +1002,7 @@ def send_email_summary(event_id):
     if show_send_button:
         send_professor_emails(event_id)
 
-    return render_template("email_confirmation.html",
+    return render_template("event_management/email_confirmation.html",
                            grouped_by_prof=grouped,
                            event_id=event_id,
                            show_send_button=False,
@@ -1023,18 +1022,6 @@ def force_resend_email(event_id):
     send_professor_emails(event_id)
     return redirect(url_for("send_email_summary", event_id=event_id))
 
-from flask import request, redirect, url_for, flash, session, render_template
-from functools import wraps
-from datetime import datetime, timedelta, date
-from uuid import uuid4
-import pytz
-import logging
-
-# Make sure to define this timezone utility at the top of your file
-EASTERN = pytz.timezone("US/Eastern")
-
-def get_eastern_now():
-    return datetime.now(EASTERN)
 
 @app.route("/submit_event", methods=["POST"])
 @login_required
@@ -1312,8 +1299,8 @@ def edit_event(event_id):
         now = get_eastern_now()
         start_dt_naive = datetime.strptime(f"{date} {start_time}", "%Y-%m-%d %H:%M")
         stop_dt_naive = datetime.strptime(f"{date} {stop_time}", "%Y-%m-%d %H:%M")
-        start_dt = eastern.localize(start_dt_naive)
-        stop_dt = eastern.localize(stop_dt_naive)
+        start_dt = EASTERN.localize(start_dt_naive)
+        stop_dt = EASTERN.localize(stop_dt_naive)
 
         # Fetch event again for re-rendering if needed
         event = cursor.execute("""
@@ -1330,7 +1317,7 @@ def edit_event(event_id):
 
         if error:
             conn.close()
-            return render_template("edit_event.html", event=event, error_message=error)
+            return render_template("event_management/edit_event.html", event=event, error_message=error)
 
         # Otherwise, update the event
         cursor.execute("""
@@ -1353,7 +1340,7 @@ def edit_event(event_id):
     if not event:
         return "Unauthorized or event not found", 403
 
-    return render_template("edit_event.html", event=event)
+    return render_template("event_management/edit_event.html", event=event)
 
 
 @app.route("/delete_event/<int:event_id>", methods=["POST"])
@@ -1474,7 +1461,7 @@ def find_student():
         students = cursor.fetchall()
         conn.close()
 
-    return render_template('find_student.html', students=students)
+    return render_template('find_student/find_student.html', students=students)
 
 
 @app.template_filter('todatetime')
@@ -1500,7 +1487,7 @@ def event_info(event_id):
         return "Event not found", 404
 
     # Pass current datetime as a string to match format in Jinja
-    return render_template("event_info.html", event=event, now=get_eastern_now().strftime("%Y-%m-%d %H:%M"))
+    return render_template("event_management/event_info.html", event=event, now=get_eastern_now().strftime("%Y-%m-%d %H:%M"))
 
 @app.route('/init-db')
 def init_db_route():
@@ -1529,6 +1516,14 @@ def debug_events():
         html += "</ul>"
 
     return html
+
+@app.route("/user-agreement")
+def user_agreement():
+    return render_template("student_form/user-agreement.html")
+
+@app.route("/privacy-policy")
+def privacy_policy():
+    return render_template("student_form/privacy-policy.html")
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0')

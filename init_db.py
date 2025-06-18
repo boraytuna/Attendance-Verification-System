@@ -4,8 +4,8 @@ import os
 
 # DB setup
 DATABASE_NAME = "attendance.db"
-EXCEL_SOURCE = "CSV-Files/prof_names.xlsx"
-COURSE_SOURCE = "CSV-Files/cleaned_course_names.xlsx"
+EXCEL_SOURCE = "mock_data/prof_names.xlsx"
+COURSE_SOURCE = "mock_data/cleaned_course_names.xlsx"
 
 # Helper: Connect to DB
 def get_db_connection():
